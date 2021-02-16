@@ -1,0 +1,27 @@
+version: "3.4"
+
+volumes:
+  redis:
+  # The contents of /root, so that bash and ipython can store history
+  web_home:
+
+services:
+
+  redis:
+    image: redis:5.0.3
+    volumes:
+      - redis:/data:z
+
+  web:
+    build: ./
+    environment:
+      FLASK_ENV: development
+      CONFIG_REDIS_URL: redis://localhost:6379/0
+      CONFIG_REDIRECT_URL: http://localhost:5000/redirect
+    command: flask run -h 0.0.0.0 -p 5000
+    volumes:
+    - web_home:/root
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis
