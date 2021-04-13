@@ -11,12 +11,14 @@ services:
     image: redis:5.0.3
     volumes:
       - redis:/data:z
+    ports:
+      - 6379:6379
 
   web:
     build: ./
     environment:
       FLASK_ENV: development
-      CONFIG_REDIS_URL: redis://localhost:6379/0
+      CONFIG_REDIS_URL: redis://redis:6379/0
       CONFIG_REDIRECT_URL: http://localhost:5000/redirect
     command: flask run -h 0.0.0.0 -p 5000
     volumes:
