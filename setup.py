@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 setup(
     name="trompa-solid",
     author="Music Technology Group, Universitat Pompeu Fabra",
-    install_requires=['requests', 'redis', 'PyJWT>=2.0.0'],
+    install_requires=['requests', 'redis', 'PyJWT>=2.0.0', 'jwcrypto', 'six', 'cryptography'],
     description="A python library for communicating with a SOLID pod",
     long_description=long_description,
     long_description_content_type="text/markdown",
