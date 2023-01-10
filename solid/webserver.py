@@ -1,20 +1,31 @@
 import jwt
-from flask import Blueprint, render_template, request, jsonify, Flask, current_app
+import flask
+from flask import request, current_app
+from flask_login import login_user, login_required, logout_user
 
 import solid
+from solid.admin import init_admin
 from solid.backend.db_backend import DBBackend
 from solid.backend.redis_backend import RedisBackend
 from solid import extensions
 from solid import db
+from solid.auth import is_safe_url, LoginForm
 
 #backend = RedisBackend(extensions.redis_client)
 backend = DBBackend()
 
 def create_app():
-    app = Flask(__name__, template_folder="../templates")
+    app = flask.Flask(__name__, template_folder="../templates")
     app.config.from_pyfile("../config.py")
+    extensions.admin.init_app(app)
     extensions.db.init_app(app)
     extensions.redis_client.init_app(app)
+    extensions.login_manager.init_app(app)
+    init_admin()
+
+    @extensions.login_manager.user_loader
+    def load_user(user_id):
+        return db.User.query.filter_by(user=user_id).first()
 
     with app.app_context():
         # On startup, generate keys if they don't exist
@@ -27,12 +38,42 @@ def create_app():
 
     return app
 
-webserver_bp = Blueprint('register', __name__)
+webserver_bp = flask.Blueprint('register', __name__)
 
 
 @webserver_bp.route("/")
 def web_index():
-    return render_template("index.html")
+    return flask.render_template("index.html")
+
+
+@webserver_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    # Here we use a class of some kind to represent and validate our
+    # client-side form data. For example, WTForms is a library that will
+    # handle this for us, and we use a custom LoginForm to validate.
+    form = LoginForm()
+    if form.validate_on_submit():
+        # Login and validate the user.
+
+        login_user(form.user)
+
+        flask.flash('Logged in successfully.')
+
+        next = request.args.get('next')
+        # is_safe_url should check if the url is safe for redirects.
+        # See http://flask.pocoo.org/snippets/62/ for an example.
+        if not is_safe_url(next):
+            return flask.abort(400)
+
+        return flask.redirect(next or flask.url_for('admin.index'))
+    return flask.render_template('login.html', form=form)
+
+
+@webserver_bp.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return flask.redirect("/")
 
 
 @webserver_bp.route("/register", methods=["POST"])
@@ -45,7 +86,7 @@ def web_register():
     if not provider:
         print("Cannot find provider, quitting")
         log_messages.append(f"Cannot find a provider for webid {webid}")
-        return render_template("register.html", log_messages=log_messages)
+        return flask.render_template("register.html", log_messages=log_messages)
 
     log_messages.append(f"Provider for this user is: {provider}")
     print(f"Provider for this user is: {provider}")
@@ -81,12 +122,12 @@ def web_register():
                                                     client_key)
     log_messages.append("Got an auth url")
 
-    return render_template("register.html", log_messages=log_messages, auth_url=auth_url)
+    return flask.render_template("register.html", log_messages=log_messages, auth_url=auth_url)
 
 
 @webserver_bp.route("/redirect")
 def web_redirect():
-    return render_template("redirect.html")
+    return flask.render_template("redirect.html")
 
 
 @webserver_bp.route("/redirect_post", methods=["POST"])
@@ -102,4 +143,4 @@ def web_redirect_save():
     #  a method to renew the key if needed
     backend.save_configuration_token(issuer, sub, id_token)
 
-    return jsonify({"status": "ok"})
+    return flask.jsonify({"status": "ok"})

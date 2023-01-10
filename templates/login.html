@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+</head>
+<body>
+
+<form method="POST" action="/login">
+    {{ form.csrf_token }}
+    <div>{{ form.username.label }}: {{ form.username() }}</div>
+    <div>{{ form.password.label }}: {{ form.password() }}</div>
+    {{ form.submit() }}
+</form>
+
+</body>
+</html>
