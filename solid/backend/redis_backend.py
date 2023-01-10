@@ -19,7 +19,7 @@ CONFIG_CLIENT_REGISTRATION = "rs-registration-{}"
 CONFIG_TOKENS = "rs-token-{}-{}"
 
 class RedisBackend(SolidBackend):
-    def __int__(self, redis_client):
+    def __init__(self, redis_client):
         self.redis_client = redis_client
 
     def get_redis_dict(self, key):

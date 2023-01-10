@@ -1,23 +1,29 @@
 import jwt
 from flask import Blueprint, render_template, request, jsonify, Flask, current_app
-from flask_redis import FlaskRedis
 
 import solid
+from solid.backend.db_backend import DBBackend
 from solid.backend.redis_backend import RedisBackend
+from solid import extensions
+from solid import db
 
-redis_client = FlaskRedis()
-
-backend = RedisBackend(redis_client)
+#backend = RedisBackend(extensions.redis_client)
+backend = DBBackend()
 
 def create_app():
     app = Flask(__name__, template_folder="../templates")
     app.config.from_pyfile("../config.py")
-    redis_client.init_app(app)
+    extensions.db.init_app(app)
+    extensions.redis_client.init_app(app)
 
-    # On startup, generate keys if they don't exist
-    if not backend.get_relying_party_keys():
-        new_key = solid.generate_keys()
-        backend.save_relying_party_keys(new_key)
+    with app.app_context():
+        # On startup, generate keys if they don't exist
+        if backend.is_ready():
+            if not backend.get_relying_party_keys():
+                new_key = solid.generate_keys()
+                backend.save_relying_party_keys(new_key)
+        else:
+            print("Warning: Backend isn't ready yet")
 
     return app
 

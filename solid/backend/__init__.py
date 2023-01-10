@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 class SolidBackend(ABC):
 
     @abstractmethod
+    def is_ready(self):
+        pass
+
+    @abstractmethod
     def get_relying_party_keys(self):
         pass
 
