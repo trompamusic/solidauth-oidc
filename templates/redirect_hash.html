@@ -1,6 +1,8 @@
-<html>
-<head>
-    <title>Redirect</title>
+{% extends "base.html" %}
+
+{% block body %}
+<div id="messages"></div>
+
     <script type="application/javascript">
         if (window.location.hash) {
             let params = {};
@@ -21,9 +23,4 @@
             document.getElementById("messages").innerText = "Cannot find the correct request arguments"
         }
     </script>
-</head>
-<body>
-<div id="messages"></div>
-
-</body>
-</html>
+{% endblock %}

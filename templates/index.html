@@ -1,6 +1,14 @@
-Give the TPL access to your solid pod
+{% extends "base.html" %}
 
-<form action="register" method="post">
-    Your webid: <input type="text" name="webid"><input type="submit">
+{% block body %}
+    Give the TPL access to your solid pod
 
-</form>
+    <form action="register" method="post">
+        <div class="form-group">
+            <label for="webIdInput" class="sr-only">Your webid</label>
+            <input type="text" class="form-control" id="webIdInput" name="webid">
+        </div>
+        <button type="submit" class="btn btn-primary mb-2">Submit</button>
+    </form>
+
+{% endblock %}

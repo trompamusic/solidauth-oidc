@@ -1,3 +1,6 @@
+{% extends "base.html" %}
+
+{% block body %}
 <h2>Registration status</h2>
 {% for log in log_messages %}
 <li>{{ log }}</li>
@@ -7,3 +10,4 @@
 <h4>Auth url</h4>
 <a href="{{ auth_url }}">Click here to give us access to your pod</a>
 {% endif %}
+{% endblock %}
