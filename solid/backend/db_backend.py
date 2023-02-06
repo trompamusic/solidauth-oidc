@@ -2,7 +2,8 @@ import sqlalchemy.exc
 
 from solid.backend import SolidBackend
 from solid import extensions
-from solid import db
+from trompasolid import db
+
 
 class DBBackend(SolidBackend):
 
@@ -16,7 +17,7 @@ class DBBackend(SolidBackend):
             return False
 
     def get_relying_party_keys(self):
-        rp = db.RelyingPartyKey.query.first()
+        rp = extensions.db.session.query(db.RelyingPartyKey).first()
         if rp:
             return rp.data
         else:
@@ -28,7 +29,7 @@ class DBBackend(SolidBackend):
         extensions.db.session.commit()
 
     def get_resource_server_configuration(self, provider):
-        rsc = db.ResourceServerConfiguration.query.filter_by(provider=provider).first()
+        rsc = extensions.db.session.query(db.ResourceServerConfiguration).filter_by(provider=provider).first()
         if rsc:
             return rsc.data
         else:
@@ -43,7 +44,7 @@ class DBBackend(SolidBackend):
         extensions.db.session.commit()
 
     def get_resource_server_keys(self, provider):
-        rsk = db.ResourceServerKeys.query.filter_by(provider=provider).first()
+        rsk = extensions.db.session.query(db.ResourceServerKeys).filter_by(provider=provider).first()
         if rsk:
             return rsk.data
         else:
@@ -58,7 +59,7 @@ class DBBackend(SolidBackend):
         extensions.db.session.commit()
 
     def get_client_registration(self, provider):
-        cr = db.ClientRegistration.query.filter_by(provider=provider).first()
+        cr = extensions.db.session.query(db.ClientRegistration).filter_by(provider=provider).first()
         if cr:
             return cr.data
         else:
