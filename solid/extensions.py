@@ -4,7 +4,9 @@ from flask_login import LoginManager
 from flask_redis import FlaskRedis
 from flask_sqlalchemy import SQLAlchemy
 
-admin = Admin()
+from solid.admin import AuthIndexView
+
+admin = Admin(index_view=AuthIndexView())
 bcrypt = Bcrypt()
 db = SQLAlchemy()
 redis_client = FlaskRedis()

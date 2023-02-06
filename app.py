@@ -28,7 +28,7 @@ def create_database():
 @app.cli.command("create-user")
 @with_appcontext
 def create_user():
-    """Create a user account"""
+    """Create an admin user account"""
     username = input("Username: ")
     pw = getpass("Password: ")
     pw2 = getpass("Again: ")

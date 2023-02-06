@@ -24,9 +24,9 @@ class LoginForm(flask_wtf.FlaskForm):
         super(LoginForm, self).__init__(*args, **kwargs)
         self.user = None
 
-    def validate(self):
+    def validate(self, extra_validators=None):
         """Validate the form."""
-        initial_validation = super(LoginForm, self).validate()
+        initial_validation = super(LoginForm, self).validate(extra_validators=extra_validators)
         if not initial_validation:
             print("FAIL INITIAL")
             print(self.errors)
