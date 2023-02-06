@@ -1,3 +1,5 @@
+from typing import Optional
+
 import jwcrypto
 import jwcrypto.jwt
 import jwt
@@ -7,14 +9,15 @@ from flask_login import login_user, login_required, logout_user
 
 import solid
 from solid.admin import init_admin
+from solid.backend import SolidBackend
 from solid.backend.db_backend import DBBackend
 from solid.backend.redis_backend import RedisBackend
 from solid import extensions
 from solid import db
 from solid.auth import is_safe_url, LoginForm
 
-#backend = RedisBackend(extensions.redis_client)
-backend = DBBackend()
+backend: Optional[SolidBackend] = None
+
 
 def create_app():
     app = flask.Flask(__name__, template_folder="../templates")
@@ -24,6 +27,12 @@ def create_app():
     extensions.redis_client.init_app(app)
     extensions.login_manager.init_app(app)
     init_admin()
+
+    global backend
+    if app.config["BACKEND"] == "db":
+        backend = DBBackend()
+    elif app.config["BACKEND"] == "redis":
+        backend = RedisBackend(extensions.redis_client)
 
     @extensions.login_manager.user_loader
     def load_user(user_id):
@@ -39,6 +48,7 @@ def create_app():
             print("Warning: Backend isn't ready yet")
 
     return app
+
 
 webserver_bp = flask.Blueprint('register', __name__)
 
@@ -66,6 +76,7 @@ def client_id():
     }
 
     return jsonify(client_information)
+
 
 @webserver_bp.route("/")
 def web_index():

@@ -18,9 +18,13 @@ CONFIG_CLIENT_REGISTRATION = "rs-registration-{}"
 # Auth tokens to act as a particular user on a Resource Server (key has providerurl-userid as a suffix)
 CONFIG_TOKENS = "rs-token-{}-{}"
 
+
 class RedisBackend(SolidBackend):
     def __init__(self, redis_client):
         self.redis_client = redis_client
+
+    def is_ready(self):
+        return self.redis_client.ping()
 
     def get_redis_dict(self, key):
         """Load a dict from redis"""

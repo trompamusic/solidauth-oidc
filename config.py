@@ -8,3 +8,7 @@ SQLALCHEMY_DATABASE_URI = os.getenv("CONFIG_SQLALCHEMY_DATABASE_URI")
 
 REDIRECT_URL = os.getenv("CONFIG_REDIRECT_URL")
 # "http://localhost:5000/redirect"
+
+BACKEND = os.getenv("CONFIG_BACKEND")
+if BACKEND not in ["redis", "db"]:
+    raise ValueError("CONFIG_BACKEND must be 'redis' or 'db'")
