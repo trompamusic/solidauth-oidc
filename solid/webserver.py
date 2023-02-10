@@ -115,8 +115,13 @@ def web_register():
     client_key = solid.load_key(backend.get_relying_party_keys())
     log_messages = []
 
-    webid = request.form.get("webid")
-    provider = solid.lookup_provider_from_profile(webid)
+    webid = request.form.get("webid_or_provider")
+
+    if solid.is_webid(webid):
+        provider = solid.lookup_provider_from_profile(webid)
+    else:
+        provider = webid
+
     if not provider:
         print("Cannot find provider, quitting")
         log_messages.append(f"Cannot find a provider for webid {webid}")
