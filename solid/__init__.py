@@ -87,10 +87,13 @@ def get_openid_configuration(op_url):
     :return:
     """
 
-    path = "/.well-known/openid-configuration"
-    parts = urllib.parse.urlparse(op_url)
-    parts = parts._replace(path=path)
-    url = urllib.parse.urlunparse(parts)
+    # https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfigurationRequest
+    # An issuer could contain a path component, the openid configuration location is appended to it.
+    path = ".well-known/openid-configuration"
+    if op_url.endswith("/"):
+        url = op_url + path
+    else:
+        url = op_url + "/" + path
 
     r = requests.get(url, verify=False)
     r.raise_for_status()
