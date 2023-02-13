@@ -4,9 +4,6 @@ from solid.backend import SolidBackend
 
 REDIS_KEY_PREFIX = "solidauth-"
 
-def make_redis_key(key_template, *args):
-    return key_template.format(*args)
-
 # Private key for this app
 CONFIG_RP_KEYS = "local-key"
 # Server configuration for a Resource Server (key has provider url as a suffix)
@@ -17,6 +14,12 @@ CONFIG_RS_JWKS = "rs-jwks-{}"
 CONFIG_CLIENT_REGISTRATION = "rs-registration-{}"
 # Auth tokens to act as a particular user on a Resource Server (key has providerurl-userid as a suffix)
 CONFIG_TOKENS = "rs-token-{}-{}"
+# PKCE state
+CONFIG_STATE = "state-{}"
+
+
+def make_redis_key(key_template, *args):
+    return key_template.format(*args)
 
 
 class RedisBackend(SolidBackend):
@@ -74,3 +77,14 @@ class RedisBackend(SolidBackend):
 
     def save_configuration_token(self, issuer, sub, token):
         return self.store_redis_str(make_redis_key(CONFIG_TOKENS, issuer, sub), token)
+
+    def get_state_data(self, state):
+        return self.get_redis_str(make_redis_key(CONFIG_STATE, state))
+
+    def delete_state_data(self, state):
+        key = make_redis_key(CONFIG_STATE, state)
+        key = REDIS_KEY_PREFIX + key
+        return self.redis_client.delete(key)
+
+    def set_state_data(self, state, code_verifier):
+        return self.store_redis_str(make_redis_key(CONFIG_STATE, state), code_verifier)

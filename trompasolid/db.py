@@ -57,3 +57,13 @@ class ConfigurationToken(Base):
 
     def __repr__(self):
         return f'<ConfigurationToken {self.id} ({self.issuer}, {self.sub})>'
+
+
+class State(Base):
+    __tablename__ = 'pkce_state'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    state: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    code_verifier: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+
+    def __repr__(self):
+        return f'<State {self.id} ({self.state}, {self.code_verifier})>'

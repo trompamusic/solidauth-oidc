@@ -126,6 +126,10 @@ def load_key(keydata):
     return jwk.JWK.from_json(keydata)
 
 
+def op_can_do_dynamic_registration(op_config):
+    return "registration_endpoint" in op_config
+
+
 def dynamic_registration(provider, redirect_url, op_config):
     """Register an app with a provider"""
     if "registration_endpoint" not in op_config:
@@ -155,17 +159,8 @@ def make_verifier_challenge():
     return code_verifier, code_challenge
 
 
-def generate_authorization_request_external_id(configuration, redirect_url, client_id):
+def generate_authorization_request(configuration, redirect_url, client_id, state, code_challenge):
     auth_url = configuration["authorization_endpoint"]
-
-
-    code_verifier, code_challenge = make_verifier_challenge()
-    state = make_random_string()
-    assert state not in STATE_STORAGE
-    STATE_STORAGE[state] = {
-        'code_verifier': code_verifier,
-        'redirect_url': request.url
-    }
 
     query = urllib.parse.urlencode({
         "response_type": "code",
@@ -181,64 +176,6 @@ def generate_authorization_request_external_id(configuration, redirect_url, clie
     url = auth_url + '?' + query
     return url
 
-
-
-def generate_authorization_request(configuration, registration, redirect_url, key: jwk.JWK):
-    auth_url = configuration["authorization_endpoint"]
-    client_id = registration["client_id"]
-
-    pubkey = key.export_public(as_dict=True)
-    pubkey.update({"alg": "RS256", "ext": True, "key_ops": ["verify"]})
-
-    code_verifier, code_challenge = make_verifier_challenge()
-    state = make_random_string()
-    assert state not in STATE_STORAGE
-    STATE_STORAGE[state] = {
-        'code_verifier': code_verifier,
-        'redirect_url': request.url
-    }
-
-    query = urllib.parse.urlencode({
-        "code_challenge": code_challenge,
-        "state": state,
-        "response_type": "code",
-        "redirect_uri": redirect_url,
-        "code_challenge_method": "S256",
-        "client_id": client_id,
-        # offline_access: also asks for refresh token
-        "scope": "openid offline_access",
-    })
-    url = auth_url + '?' + query
-    return url
-
-    """
-    nonce = secrets.token_urlsafe(24)
-    request = {
-        "redirect_uri": redirect_url,
-        "display": "page",
-        "nonce": nonce,
-        "key": pubkey
-    }
-    print(request)
-    # I can't seem to use jwcrypto to encode a jwt and sign it with the key, so let's just
-    # install pyjwt and use that instead
-    privatekey = key.export_to_pem(private_key=True, password=None)
-    request_jwt = jwt.encode(request, key=None, algorithm=None)
-
-    state = secrets.token_urlsafe(24)
-    params = {
-        "scope": "openid",
-        "client_id": client_id,
-        # TODO: This should be the values we added when registering
-        "response_type": "id_token",
-        "request": request_jwt,
-        "state": state,
-    }
-
-    p = Request('GET', auth_url, params=params).prepare()
-
-    return p.url
-    """
 
 def make_token_for(keypair, uri, method):
     jwt = jwcrypto.jwt.JWT(header={
@@ -257,42 +194,3 @@ def make_token_for(keypair, uri, method):
                            })
     jwt.make_signed_token(keypair)
     return jwt.serialize()
-
-
-def validate_auth_callback(auth_code, state, provider_info, client_id, redirect_uri):
-    assert state in STATE_STORAGE, f"state {state} not in STATE_STORAGE?"
-
-
-    # Generate a key-pair.
-    keypair = jwcrypto.jwk.JWK.generate(kty='EC', crv='P-256')
-
-    code_verifier = STATE_STORAGE[state].pop('code_verifier')
-    print(f"Code verifier: {code_verifier}")
-    print(f"{client_id=}")
-    print(f"{redirect_uri=}")
-    print(f"{auth_code=}")
-    print(f"{provider_info['token_endpoint']=}")
-
-    # Exchange auth code for access token
-    resp = requests.post(url=provider_info['token_endpoint'],
-                         data={
-                             "grant_type": "authorization_code",
-                             "client_id": client_id,
-                             "redirect_uri": redirect_uri,
-                             "code": auth_code,
-                             "code_verifier": code_verifier,
-                         },
-                         headers={
-                             'DPoP':
-                                 make_token_for(
-                                     keypair, provider_info['token_endpoint'],
-                                     'POST')
-                         },
-                         allow_redirects=False)
-    result = resp.json()
-    print("exchange result", result)
-
-    return {
-        "key": keypair.export(),
-        "result": result
-    }

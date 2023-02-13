@@ -81,3 +81,24 @@ class DBBackend(SolidBackend):
         )
         extensions.db.session.add(ct)
         extensions.db.session.commit()
+
+    def get_state_data(self, state):
+        st = extensions.db.session.query(db.State).filter_by(state=state).first()
+        if st:
+            return st.code_verifier
+        else:
+            return None
+
+    def delete_state_data(self, state):
+        st = extensions.db.session.query(db.State).filter_by(state=state).first()
+        if st:
+            extensions.db.session.delete(st)
+            extensions.db.session.commit()
+
+    def set_state_data(self, state, code_verifier):
+        st = db.State(
+            state=state,
+            code_verifier=code_verifier
+        )
+        extensions.db.session.add(st)
+        extensions.db.session.commit()

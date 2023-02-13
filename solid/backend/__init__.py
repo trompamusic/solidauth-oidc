@@ -42,3 +42,15 @@ class SolidBackend(ABC):
     @abstractmethod
     def save_configuration_token(self, issuer, sub, token):
         pass
+
+    @abstractmethod
+    def get_state_data(self, state):
+        pass
+
+    @abstractmethod
+    def delete_state_data(self, state):
+        pass
+
+    @abstractmethod
+    def set_state_data(self, state, code_verifier):
+        pass
