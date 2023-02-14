@@ -87,7 +87,7 @@ class DBBackend(SolidBackend):
     def get_configuration_token(self, issuer, sub):
         ct = self.session.query(db.ConfigurationToken).filter_by(issuer=issuer, sub=sub).first()
         if ct:
-            return ct.token
+            return ct.data
         else:
             return None
 

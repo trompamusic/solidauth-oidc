@@ -1,4 +1,8 @@
+import json
+
 import click
+import jwcrypto.jwk
+import jwcrypto.jwt
 from flask import Blueprint, current_app
 
 import solid
@@ -6,7 +10,6 @@ from solid import extensions
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
 from trompasolid.backend.redis_backend import RedisBackend
-from solid.webserver import validate_auth_callback
 
 cli_bp = Blueprint('cli', __name__)
 
@@ -69,6 +72,7 @@ def register(provider):
 
     if not provider_config:
         print("No configuration exists for this provider, use `lookup-op` first")
+        return
 
     existing_registration = get_backend().get_client_registration(provider)
     if existing_registration:
@@ -138,10 +142,37 @@ def exchange_auth(provider, code, state):
     client_registration = get_backend().get_client_registration(provider)
     if not client_registration:
         raise Exception("Expected to find a registration for a backend but can't get one")
-    client_id = client_registration["client_id"]
     provider_config = get_backend().get_resource_server_configuration(provider)
 
     redirect_uri = current_app.config['REDIRECT_URL']
-    resp = validate_auth_callback(code, state, provider_config, client_id, redirect_uri)
-    print(resp)
-    result = resp["result"]
+
+    signing_algorithm = solid.get_signing_algorithm(provider_config)
+    code_verifier = get_backend().get_state_data(state)
+    keypair = solid.load_key(get_backend().get_relying_party_keys(signing_algorithm))
+    assert code_verifier is not None, f"state {state} not in backend?"
+
+    client_id = client_registration['client_id']
+    client_secret = client_registration['client_secret']
+    auth = (client_id, client_secret)
+    resp = solid.validate_auth_callback(signing_algorithm, keypair, code_verifier, code, provider_config, client_id, redirect_uri, auth=auth)
+
+    if resp:
+        print(resp)
+        id_token = resp['id_token']
+        server_key = get_backend().get_resource_server_keys(provider)
+        # TODO: It seems like a server may give more than one key, is this the correct one?
+        key = server_key['keys'][0]
+        key = jwcrypto.jwk.JWK.from_json(json.dumps(key))
+        decoded_id_token = jwcrypto.jwt.JWT()
+        decoded_id_token.deserialize(id_token, key=key)
+
+        claims = json.loads(decoded_id_token.claims)
+
+        issuer = claims['iss']
+        sub = claims['sub']
+        print(claims)
+
+        get_backend().save_configuration_token(issuer, sub, resp)
+        print(f"Saved {issuer=}, {sub=}")
+    else:
+        print("No response - error when exchanging key")

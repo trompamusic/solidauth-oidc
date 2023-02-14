@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 import rdflib
 import requests
 import requests.utils
-from jwcrypto import jwk
+import jwcrypto.jwk
 import jwcrypto.jwt
 from oic.oic import Client as OicClient
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
@@ -115,12 +115,12 @@ def generate_keys():
 
     Returns a string containing the json export of the private key
     """
-    key = jwk.JWK.generate(kty='EC', crv='P-256')
+    key = jwcrypto.jwk.JWK.generate(kty='EC', crv='P-256')
     return key.export_private()
 
 
 def load_key(keydata):
-    return jwk.JWK.from_json(keydata)
+    return jwcrypto.jwk.JWK.from_json(keydata)
 
 
 def op_can_do_dynamic_registration(op_config):
@@ -172,6 +172,35 @@ def generate_authorization_request(configuration, redirect_url, client_id, state
 
     url = auth_url + '?' + query
     return url
+
+
+def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, client_id, redirect_uri, auth=None):
+    # Exchange auth code for access token
+    resp = requests.post(
+        url=provider_info['token_endpoint'],
+        data={
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code": auth_code,
+            "code_verifier": code_verifier,
+        },
+        headers={
+            "DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")
+        },
+        # TODO: Community Solid Server seems to think that we're doing Basic Auth with the client id
+        #  and secret, even though with my understanding, PKCE means that it's unnecessary. Unsure of if
+        #  this is due to CSS or something during dynamic registration
+        #  NSS doesn't seem to have this problem
+        auth=auth,
+        allow_redirects=False)
+    try:
+        resp.raise_for_status()
+        result = resp.json()
+        return result
+    except requests.exceptions.HTTPError:
+        print(resp.text)
+        return None
 
 
 def make_token_for(keypair, uri, method):

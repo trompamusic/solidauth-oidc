@@ -1,10 +1,10 @@
+import json
 from typing import Optional
 
 import jwcrypto
+import jwcrypto.jwk
 import jwcrypto.jwt
-import jwt
 import flask
-import requests
 import zlib
 from flask import request, current_app, jsonify
 from flask_login import login_user, login_required, logout_user
@@ -12,8 +12,8 @@ from flask_login import login_user, login_required, logout_user
 import solid
 from solid.admin import init_admin
 from trompasolid.backend import SolidBackend
-from trompasolid.backend import DBBackend
-from trompasolid.backend import RedisBackend
+from trompasolid.backend.db_backend import DBBackend
+from trompasolid.backend.redis_backend import RedisBackend
 from solid import extensions
 from solid import db
 from solid.auth import is_safe_url, LoginForm
@@ -222,7 +222,6 @@ def web_redirect():
 
     provider = flask.session['provider']
     provider_config = backend.get_resource_server_configuration(provider)
-    print(provider_config)
 
     do_dynamic_registration = solid.op_can_do_dynamic_registration(provider_config) and not current_app.config['ALWAYS_USE_CLIENT_URL']
     if do_dynamic_registration:
@@ -230,76 +229,44 @@ def web_redirect():
         if not client_registration:
             raise Exception("Expected to find a registration for a backend but can't get one")
         client_id = client_registration["client_id"]
+        client_secret = client_registration["client_secret"]
+        auth = (client_id, client_secret)
     else:
         issuer = provider_config["issuer"]
         client_id = get_client_url_for_issuer(current_app.config['BASE_URL'], issuer)
+        auth = None
 
     redirect_uri = current_app.config['REDIRECT_URL']
-    resp = validate_auth_callback(auth_code, state, provider_config, client_id, redirect_uri)
-    result = resp["result"]
 
-    flask.session['key'] = resp["key"]
-    flask.session['access_token'] = result['access_token']
+    code_verifier = backend.get_state_data(state)
 
-    decoded_access_token = jwcrypto.jwt.JWT()
-    decoded_access_token.deserialize(result['access_token'])
-    decoded_id_token = jwcrypto.jwt.JWT()
-    decoded_id_token.deserialize(result['id_token'])
-    print(f"access token: {decoded_access_token}")
-    print(f"id token: {decoded_id_token}")
+    keypair = solid.load_key(backend.get_relying_party_keys())
+    assert code_verifier is not None, f"state {state} not in backend?"
+
+    resp = solid.validate_auth_callback(keypair, code_verifier, auth_code, provider_config, client_id, redirect_uri, auth)
+
+    if resp:
+        id_token = resp['id_token']
+        server_key = backend.get_resource_server_keys(provider)
+        # TODO: It seems like a server may give more than one key, is this the correct one?
+        # TODO: We need to load the jwt, and from its header find the "kid" (key id) parameter
+        #  from this, we can load through the list of server_key keys and find the key with this keyid
+        #  and then use that key to validate the message
+        key = server_key['keys'][0]
+        key = jwcrypto.jwk.JWK.from_json(json.dumps(key))
+        decoded_id_token = jwcrypto.jwt.JWT()
+        decoded_id_token.deserialize(id_token, key=key)
+
+        claims = json.loads(decoded_id_token.claims)
+
+        issuer = claims['iss']
+        sub = claims['sub']
+        backend.save_configuration_token(issuer, sub, resp)
+
+    else:
+        print("Error when validating auth callback")
 
     # TODO: If we want, we can make the original auth page include a redirect URL field, and redirect the user
     #  back to that when this has finished
     # return flask.redirect(STATE_STORAGE[state].pop('redirect_url'))
     return flask.render_template("success.html")
-
-
-def validate_auth_callback(auth_code, state, provider_info, client_id, redirect_uri):
-    code_verifier = backend.get_state_data(state)
-    keypair = solid.load_key(backend.get_relying_party_keys())
-    assert code_verifier is not None, f"state {state} not in backend?"
-
-    print(f"Code verifier: {code_verifier}")
-    print(f"{client_id=}")
-    print(f"{redirect_uri=}")
-    print(f"{auth_code=}")
-    print(f"{provider_info['token_endpoint']=}")
-
-    # Exchange auth code for access token
-    resp = requests.post(
-        url=provider_info['token_endpoint'],
-        data={
-            "grant_type": "authorization_code",
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "code": auth_code,
-            "code_verifier": code_verifier,
-        },
-        headers={
-            "DPoP": solid.make_token_for(keypair, provider_info["token_endpoint"], "POST")
-        },
-        allow_redirects=False)
-    try:
-        resp.raise_for_status()
-        result = resp.json()
-        return result
-    except requests.exceptions.HTTPError:
-        print(resp.text)
-        return None
-
-
-# This is used by the node-solid-server auth (post)
-@webserver_bp.route("/redirect_post", methods=["POST"])
-def web_redirect_save():
-    body = request.json
-    # TODO: If the required fields aren't set
-    id_token = body['id_token']
-    decoded_token = jwt.decode(id_token, algorithms=["RS256"], options={"verify_signature": False})
-    issuer = decoded_token['iss']
-    sub = decoded_token['sub']
-
-    # TODO: We need to store more information here, including token expiry information, and
-    #  a method to renew the key if needed
-    backend.save_configuration_token(issuer, sub, id_token)
-
-    return flask.jsonify({"status": "ok"})
