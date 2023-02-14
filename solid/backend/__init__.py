@@ -44,6 +44,10 @@ class SolidBackend(ABC):
         pass
 
     @abstractmethod
+    def get_configuration_token(self, issuer, sub):
+        pass
+
+    @abstractmethod
     def get_state_data(self, state):
         pass
 

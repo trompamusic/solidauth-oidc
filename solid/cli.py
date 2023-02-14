@@ -1,25 +1,34 @@
-import json
-import os
-
 import click
 from flask import Blueprint, current_app
 
 import solid
+from solid import extensions
+from solid.backend import SolidBackend
+from solid.backend.db_backend import DBBackend
+from solid.backend.redis_backend import RedisBackend
+from solid.webserver import validate_auth_callback
 
 cli_bp = Blueprint('cli', __name__)
 
-LOCAL_KEYS_PATH = "local-keys.jwks"
-CONFIGURATION_PATH = "rs-configuration.json"
-JWKS_PATH = "rs-keys.jwks"
-REGISTRATION_PATH = "rs-registration.json"
+
+def get_backend() -> SolidBackend:
+    # function so that we have access to current_app. This should be an extension
+    if current_app.config["BACKEND"] == "db":
+        backend = DBBackend()
+    elif current_app.config["BACKEND"] == "redis":
+        backend = RedisBackend(extensions.redis_client)
+    return backend
 
 
 @cli_bp.cli.command()
 def create_key():
     """Step 1, Create a local key for use by the service"""
+    existing_keys = get_backend().get_relying_party_keys()
+    if existing_keys:
+        print("Got keys, not generating more")
+        return
     keys = solid.generate_keys()
-    with open(LOCAL_KEYS_PATH, "w") as fp:
-        fp.write(keys)
+    get_backend().save_relying_party_keys(keys)
 
 
 @cli_bp.cli.command('lookup-op')
@@ -30,35 +39,24 @@ def lookup_op_configuration(profileurl):
     just load it
     """
 
-    if os.path.exists(CONFIGURATION_PATH):
-        conf = json.load(open(CONFIGURATION_PATH))
-    else:
-        conf = {}
-
-    if os.path.exists(JWKS_PATH):
-        jwks = json.load(open(JWKS_PATH))
-    else:
-        jwks = {}
-
     provider = solid.lookup_provider_from_profile(profileurl)
     if not provider:
         print("Cannot find provider, quitting")
         return
     print(f"Provider for this user is: {provider}")
 
-    if provider in conf and provider in jwks:
+    provider_configuration = get_backend().get_resource_server_configuration(provider)
+    provider_keys = get_backend().get_resource_server_keys(provider)
+
+    if provider_configuration and provider_keys:
         print(f"Configuration for {provider} already exists, quitting")
         return
 
     openid_conf = solid.get_openid_configuration(provider)
-    conf[provider] = openid_conf
-    with open(CONFIGURATION_PATH, "w") as fp:
-        json.dump(conf, fp)
+    get_backend().save_resource_server_configuration(provider, openid_conf)
 
-    j = solid.load_op_jwks(openid_conf)
-    jwks[provider] = j
-    with open(JWKS_PATH, "w") as fp:
-        json.dump(jwks, fp)
+    provider_keys = solid.load_op_jwks(openid_conf)
+    get_backend().save_resource_server_keys(provider, provider_keys)
 
 
 @cli_bp.cli.command()
@@ -67,32 +65,35 @@ def register(provider):
     """Step 3, Register with the OP.
     Pass in the provider url from `lookup-op`"""
 
-    if not os.path.exists(CONFIGURATION_PATH):
-        print("No config file, use `lookup-op` first")
-        return
+    provider_config = get_backend().get_resource_server_configuration(provider)
 
-    with open(CONFIGURATION_PATH) as fp:
-        configuration = json.load(fp)
+    if not provider_config:
+        print("No configuration exists for this provider, use `lookup-op` first")
 
-    if os.path.exists(REGISTRATION_PATH):
-        reg = json.load(open(REGISTRATION_PATH))
-    else:
-        reg = {}
-
-    if provider in reg:
+    existing_registration = get_backend().get_client_registration(provider)
+    if existing_registration:
         print(f"Registration for {provider} already exists, quitting")
         return
 
-    if provider not in configuration:
-        print(f"{provider} not in config, use `lookup-op`")
-        return
+    do_dynamic_registration = solid.op_can_do_dynamic_registration(provider_config) and not current_app.config['ALWAYS_USE_CLIENT_URL']
+    print("Can do dynamic:", solid.op_can_do_dynamic_registration(provider_config))
 
-    provider_conf = configuration[provider]
-    client_registration = solid.dynamic_registration(provider, current_app.config['REDIRECT_URL'], provider_conf)
-    reg[provider] = client_registration
+    if do_dynamic_registration:
+        print(f"Requested to do dynamic client registration")
+        client_registration = get_backend().get_client_registration(provider)
+        if client_registration:
+            print(f"Registration for {provider} already exists, skipping")
+        else:
+            client_registration = solid.dynamic_registration(provider, current_app.config['REDIRECT_URL'], provider_config)
+            get_backend().save_client_registration(provider, client_registration)
 
-    with open(REGISTRATION_PATH, "w") as fp:
-        json.dump(reg, fp)
+            print("Registered client with provider")
+        client_id = client_registration["client_id"]
+        print(f"Client ID is {client_id}")
+    else:
+        print("Cannot do dynamic registration (either the provider doesn't support it or config.ALWAYS_USE_CLIENT_URL is True")
+        print("Requests to this provider require that the `client_id` parameter is a public URL, and this CLI doesn't")
+        print("   include a webserver, so cannot continue")
 
 
 @cli_bp.cli.command()
@@ -103,12 +104,44 @@ def auth_request(profileurl):
     Provide a user's profile url
     """
     provider = solid.lookup_provider_from_profile(profileurl)
+    provider_configuration = get_backend().get_resource_server_configuration(provider)
+    client_registration = get_backend().get_client_registration(provider)
+    if client_registration is None:
+        print("No client registration, use `register` first")
+        return
 
-    with open(REGISTRATION_PATH) as fp:
-        registration = json.load(fp)
-    key = solid.load_key(LOCAL_KEYS_PATH)
-    with open(CONFIGURATION_PATH) as fp:
-        configuration = json.load(fp)
+    client_id = client_registration["client_id"]
+    code_verifier, code_challenge = solid.make_verifier_challenge()
+    state = solid.make_random_string()
 
-    auth = solid.generate_authorization_request(configuration[provider], registration[provider], key)
-    print(auth)
+    assert get_backend().get_state_data(state) is None
+    get_backend().set_state_data(state, code_verifier)
+
+    auth_url = solid.generate_authorization_request(
+        provider_configuration, current_app.config['REDIRECT_URL'],
+        client_id,
+        state, code_challenge
+    )
+    print(auth_url)
+
+
+@cli_bp.cli.command()
+@click.argument('provider')
+@click.argument('code')
+@click.argument('state')
+def exchange_auth(provider, code, state):
+    """Step 5, Exchange a code for a long-term token.
+
+    Provide a provider url, and the code and state that were returned in the redirect by the provider
+    """
+
+    client_registration = get_backend().get_client_registration(provider)
+    if not client_registration:
+        raise Exception("Expected to find a registration for a backend but can't get one")
+    client_id = client_registration["client_id"]
+    provider_config = get_backend().get_resource_server_configuration(provider)
+
+    redirect_uri = current_app.config['REDIRECT_URL']
+    resp = validate_auth_callback(code, state, provider_config, client_id, redirect_uri)
+    print(resp)
+    result = resp["result"]

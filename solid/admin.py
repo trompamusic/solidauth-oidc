@@ -4,7 +4,7 @@ from flask_login import current_user
 from flask_admin.contrib.sqla import ModelView
 
 from solid import extensions
-import solid.db
+
 import trompasolid.db
 
 
@@ -26,6 +26,7 @@ class AuthModelView(AuthBaseView, ModelView):
 
 
 def init_admin():
+    import solid.db
     extensions.admin.add_view(AuthModelView(solid.db.User, extensions.db.session))
     extensions.admin.add_view(AuthModelView(trompasolid.db.ClientRegistration, extensions.db.session))
     extensions.admin.add_view(AuthModelView(trompasolid.db.ConfigurationToken, extensions.db.session))

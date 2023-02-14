@@ -9,14 +9,11 @@ from urllib.error import HTTPError
 import rdflib
 import requests
 import requests.utils
-from flask import request
 from jwcrypto import jwk
 import jwcrypto.jwt
 from oic.oic import Client as OicClient
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
-# TODO: This should be in a flask session or in the DB
-STATE_STORAGE = {}
 
 def lookup_provider_from_profile(profile_url: str):
     """
@@ -118,7 +115,7 @@ def generate_keys():
 
     Returns a string containing the json export of the private key
     """
-    key = jwk.JWK.generate(kty='RSA', size=2048)
+    key = jwk.JWK.generate(kty='EC', crv='P-256')
     return key.export_private()
 
 
@@ -178,19 +175,18 @@ def generate_authorization_request(configuration, redirect_url, client_id, state
 
 
 def make_token_for(keypair, uri, method):
-    jwt = jwcrypto.jwt.JWT(header={
-        "typ":
-        "dpop+jwt",
-        "alg":
-        "ES256",
-        "jwk":
-        keypair.export(private_key=False, as_dict=True)
-    },
-                           claims={
-                               "jti": make_random_string(),
-                               "htm": method,
-                               "htu": uri,
-                               "iat": int(datetime.datetime.now().timestamp())
-                           })
+    jwt = jwcrypto.jwt.JWT(
+        header={
+            "typ": "dpop+jwt",
+            "alg": "ES256",
+            "jwk": keypair.export(private_key=False, as_dict=True)
+        },
+        claims={
+           "jti": make_random_string(),
+           "htm": method,
+           "htu": uri,
+           "iat": int(datetime.datetime.now().timestamp())
+        }
+    )
     jwt.make_signed_token(keypair)
     return jwt.serialize()

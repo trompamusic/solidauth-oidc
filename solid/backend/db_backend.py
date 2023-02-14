@@ -82,6 +82,13 @@ class DBBackend(SolidBackend):
         extensions.db.session.add(ct)
         extensions.db.session.commit()
 
+    def get_configuration_token(self, issuer, sub, token):
+        ct = extensions.db.session.query(db.ConfigurationToken).filter_by(issuer=issuer, sub=sub).first()
+        if ct:
+            return ct.token
+        else:
+            return None
+
     def get_state_data(self, state):
         st = extensions.db.session.query(db.State).filter_by(state=state).first()
         if st:

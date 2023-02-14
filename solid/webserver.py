@@ -44,6 +44,7 @@ def create_app():
         # On startup, generate keys if they don't exist
         if backend.is_ready():
             if not backend.get_relying_party_keys():
+                print("On startup generating new RP keys")
                 new_key = solid.generate_keys()
                 backend.save_relying_party_keys(new_key)
         else:
@@ -133,7 +134,6 @@ def get_client_url_for_issuer(baseurl, issuer):
 
 @webserver_bp.route("/register", methods=["POST"])
 def web_register():
-    client_key = solid.load_key(backend.get_relying_party_keys())
     log_messages = []
 
     webid = request.form.get("webid_or_provider")
@@ -223,8 +223,6 @@ def web_redirect():
     provider = flask.session['provider']
     provider_config = backend.get_resource_server_configuration(provider)
     print(provider_config)
-    client_registration = backend.get_client_registration(provider)
-    print(client_registration)
 
     do_dynamic_registration = solid.op_can_do_dynamic_registration(provider_config) and not current_app.config['ALWAYS_USE_CLIENT_URL']
     if do_dynamic_registration:
@@ -250,16 +248,16 @@ def web_redirect():
     print(f"access token: {decoded_access_token}")
     print(f"id token: {decoded_id_token}")
 
+    # TODO: If we want, we can make the original auth page include a redirect URL field, and redirect the user
+    #  back to that when this has finished
     # return flask.redirect(STATE_STORAGE[state].pop('redirect_url'))
     return flask.render_template("success.html")
 
 
 def validate_auth_callback(auth_code, state, provider_info, client_id, redirect_uri):
     code_verifier = backend.get_state_data(state)
+    keypair = solid.load_key(backend.get_relying_party_keys())
     assert code_verifier is not None, f"state {state} not in backend?"
-
-    # Generate a key-pair.
-    keypair = jwcrypto.jwk.JWK.generate(kty='EC', crv='P-256')
 
     print(f"Code verifier: {code_verifier}")
     print(f"{client_id=}")
@@ -268,29 +266,26 @@ def validate_auth_callback(auth_code, state, provider_info, client_id, redirect_
     print(f"{provider_info['token_endpoint']=}")
 
     # Exchange auth code for access token
-    resp = requests.post(url=provider_info['token_endpoint'],
-                         data={
-                             "grant_type": "authorization_code",
-                             "client_id": client_id,
-                             "redirect_uri": redirect_uri,
-                             "code": auth_code,
-                             "code_verifier": code_verifier,
-                         },
-                         headers={
-                             'DPoP':
-                                 solid.make_token_for(
-                                     keypair, provider_info['token_endpoint'],
-                                     'POST')
-                         },
-                         allow_redirects=False)
-    result = resp.json()
-    print("exchange result", result)
-    print("Response status code", resp.status_code)
-
-    return {
-        "key": keypair.export(),
-        "result": result
-    }
+    resp = requests.post(
+        url=provider_info['token_endpoint'],
+        data={
+            "grant_type": "authorization_code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code": auth_code,
+            "code_verifier": code_verifier,
+        },
+        headers={
+            "DPoP": solid.make_token_for(keypair, provider_info["token_endpoint"], "POST")
+        },
+        allow_redirects=False)
+    try:
+        resp.raise_for_status()
+        result = resp.json()
+        return result
+    except requests.exceptions.HTTPError:
+        print(resp.text)
+        return None
 
 
 # This is used by the node-solid-server auth (post)
