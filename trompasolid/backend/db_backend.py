@@ -1,11 +1,13 @@
 import sqlalchemy.exc
 
-from solid.backend import SolidBackend
-from solid import extensions
+from trompasolid.backend import SolidBackend
 from trompasolid import db
 
 
 class DBBackend(SolidBackend):
+    
+    def __init__(self, session):
+        self.session = session
 
     def is_ready(self):
         # ProgrammingError is raised if the tables don't exist. Use this as
@@ -17,7 +19,7 @@ class DBBackend(SolidBackend):
             return False
 
     def get_relying_party_keys(self):
-        rp = extensions.db.session.query(db.RelyingPartyKey).first()
+        rp = self.session.query(db.RelyingPartyKey).first()
         if rp:
             return rp.data
         else:
@@ -25,11 +27,11 @@ class DBBackend(SolidBackend):
 
     def save_relying_party_keys(self, keys):
         rp = db.RelyingPartyKey(data=keys)
-        extensions.db.session.add(rp)
-        extensions.db.session.commit()
+        self.session.add(rp)
+        self.session.commit()
 
     def get_resource_server_configuration(self, provider):
-        rsc = extensions.db.session.query(db.ResourceServerConfiguration).filter_by(provider=provider).first()
+        rsc = self.session.query(db.ResourceServerConfiguration).filter_by(provider=provider).first()
         if rsc:
             return rsc.data
         else:
@@ -40,11 +42,11 @@ class DBBackend(SolidBackend):
             provider=provider,
             data=configuration
         )
-        extensions.db.session.add(rsc)
-        extensions.db.session.commit()
+        self.session.add(rsc)
+        self.session.commit()
 
     def get_resource_server_keys(self, provider):
-        rsk = extensions.db.session.query(db.ResourceServerKeys).filter_by(provider=provider).first()
+        rsk = self.session.query(db.ResourceServerKeys).filter_by(provider=provider).first()
         if rsk:
             return rsk.data
         else:
@@ -55,11 +57,11 @@ class DBBackend(SolidBackend):
             provider=provider,
             data=keys
         )
-        extensions.db.session.add(rsk)
-        extensions.db.session.commit()
+        self.session.add(rsk)
+        self.session.commit()
 
     def get_client_registration(self, provider):
-        cr = extensions.db.session.query(db.ClientRegistration).filter_by(provider=provider).first()
+        cr = self.session.query(db.ClientRegistration).filter_by(provider=provider).first()
         if cr:
             return cr.data
         else:
@@ -70,8 +72,8 @@ class DBBackend(SolidBackend):
             provider=provider,
             data=registration
         )
-        extensions.db.session.add(cr)
-        extensions.db.session.commit()
+        self.session.add(cr)
+        self.session.commit()
 
     def save_configuration_token(self, issuer, sub, token):
         ct = db.ConfigurationToken(
@@ -79,33 +81,33 @@ class DBBackend(SolidBackend):
             sub=sub,
             data=token
         )
-        extensions.db.session.add(ct)
-        extensions.db.session.commit()
+        self.session.add(ct)
+        self.session.commit()
 
-    def get_configuration_token(self, issuer, sub, token):
-        ct = extensions.db.session.query(db.ConfigurationToken).filter_by(issuer=issuer, sub=sub).first()
+    def get_configuration_token(self, issuer, sub):
+        ct = self.session.query(db.ConfigurationToken).filter_by(issuer=issuer, sub=sub).first()
         if ct:
             return ct.token
         else:
             return None
 
     def get_state_data(self, state):
-        st = extensions.db.session.query(db.State).filter_by(state=state).first()
+        st = self.session.query(db.State).filter_by(state=state).first()
         if st:
             return st.code_verifier
         else:
             return None
 
     def delete_state_data(self, state):
-        st = extensions.db.session.query(db.State).filter_by(state=state).first()
+        st = self.session.query(db.State).filter_by(state=state).first()
         if st:
-            extensions.db.session.delete(st)
-            extensions.db.session.commit()
+            self.session.delete(st)
+            self.session.commit()
 
     def set_state_data(self, state, code_verifier):
         st = db.State(
             state=state,
             code_verifier=code_verifier
         )
-        extensions.db.session.add(st)
-        extensions.db.session.commit()
+        self.session.add(st)
+        self.session.commit()

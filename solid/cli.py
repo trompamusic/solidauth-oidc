@@ -3,9 +3,9 @@ from flask import Blueprint, current_app
 
 import solid
 from solid import extensions
-from solid.backend import SolidBackend
-from solid.backend.db_backend import DBBackend
-from solid.backend.redis_backend import RedisBackend
+from trompasolid.backend import SolidBackend
+from trompasolid.backend.db_backend import DBBackend
+from trompasolid.backend.redis_backend import RedisBackend
 from solid.webserver import validate_auth_callback
 
 cli_bp = Blueprint('cli', __name__)
@@ -14,7 +14,7 @@ cli_bp = Blueprint('cli', __name__)
 def get_backend() -> SolidBackend:
     # function so that we have access to current_app. This should be an extension
     if current_app.config["BACKEND"] == "db":
-        backend = DBBackend()
+        backend = DBBackend(extensions.db.session)
     elif current_app.config["BACKEND"] == "redis":
         backend = RedisBackend(extensions.redis_client)
     return backend

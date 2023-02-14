@@ -1,6 +1,6 @@
 import json
 
-from solid.backend import SolidBackend
+from trompasolid.backend import SolidBackend
 
 REDIS_KEY_PREFIX = "solidauth-"
 

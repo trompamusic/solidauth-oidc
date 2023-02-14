@@ -11,9 +11,9 @@ from flask_login import login_user, login_required, logout_user
 
 import solid
 from solid.admin import init_admin
-from solid.backend import SolidBackend
-from solid.backend.db_backend import DBBackend
-from solid.backend.redis_backend import RedisBackend
+from trompasolid.backend import SolidBackend
+from trompasolid.backend import DBBackend
+from trompasolid.backend import RedisBackend
 from solid import extensions
 from solid import db
 from solid.auth import is_safe_url, LoginForm
@@ -32,7 +32,7 @@ def create_app():
 
     global backend
     if app.config["BACKEND"] == "db":
-        backend = DBBackend()
+        backend = DBBackend(extensions.db.session)
     elif app.config["BACKEND"] == "redis":
         backend = RedisBackend(extensions.redis_client)
 
