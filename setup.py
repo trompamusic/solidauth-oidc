@@ -11,7 +11,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/trompamusic/solid-auth-demo",
-    packages=['trompasolid'],
+    packages=['trompasolid', 'trompasolid.backend'],
     use_scm_version=True,
     setup_requires=['setuptools_scm'],
     classifiers=[
