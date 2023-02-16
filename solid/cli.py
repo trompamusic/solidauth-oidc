@@ -10,6 +10,7 @@ from solid import extensions
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
 from trompasolid.backend.redis_backend import RedisBackend
+from trompasolid.dpop import make_random_string
 
 cli_bp = Blueprint('cli', __name__)
 
@@ -116,7 +117,7 @@ def auth_request(profileurl):
 
     client_id = client_registration["client_id"]
     code_verifier, code_challenge = solid.make_verifier_challenge()
-    state = solid.make_random_string()
+    state = make_random_string()
 
     assert get_backend().get_state_data(state) is None
     get_backend().set_state_data(state, code_verifier)

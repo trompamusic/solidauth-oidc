@@ -1,8 +1,5 @@
 import base64
-import datetime
 import hashlib
-import os
-import re
 import urllib.parse
 from urllib.error import HTTPError
 
@@ -13,6 +10,8 @@ import jwcrypto.jwk
 import jwcrypto.jwt
 from oic.oic import Client as OicClient
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
+
+from trompasolid.dpop import make_random_string, make_token_for
 
 
 def lookup_provider_from_profile(profile_url: str):
@@ -140,12 +139,6 @@ def dynamic_registration(provider, redirect_url, op_config):
     return registration_response.to_dict()
 
 
-def make_random_string():
-    x = base64.urlsafe_b64encode(os.urandom(40)).decode('utf-8')
-    x = re.sub('[^a-zA-Z0-9]+', '', x)
-    return x
-
-
 def make_verifier_challenge():
     code_verifier = make_random_string()
 
@@ -201,21 +194,3 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
     except requests.exceptions.HTTPError:
         print(resp.text)
         return None
-
-
-def make_token_for(keypair, uri, method):
-    jwt = jwcrypto.jwt.JWT(
-        header={
-            "typ": "dpop+jwt",
-            "alg": "ES256",
-            "jwk": keypair.export(private_key=False, as_dict=True)
-        },
-        claims={
-           "jti": make_random_string(),
-           "htm": method,
-           "htu": uri,
-           "iat": int(datetime.datetime.now().timestamp())
-        }
-    )
-    jwt.make_signed_token(keypair)
-    return jwt.serialize()

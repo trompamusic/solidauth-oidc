@@ -1,15 +1,17 @@
 import jwcrypto.jwk
 import jwcrypto.jwt
 import requests
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
 
-import solid
-from trompasolid.backend.db_backend import DBBackend
+from trompasolid.backend import SolidBackend
+from trompasolid.dpop import make_token_for
 
-engine = create_engine("postgresql+psycopg2://localhost/solid_oidc")
-session = Session(engine)
-backend = DBBackend(session)
+
+backend: SolidBackend = None
+
+
+def set_backend(backend_):
+    global backend
+    backend = backend_
 
 
 def get_bearer_for_user(provider, user, url, method):
@@ -30,7 +32,7 @@ def get_bearer_for_user(provider, user, url, method):
 
     headers = {
         'Authorization': ('DPoP ' + access_token),
-        'DPoP': solid.make_token_for(private_key, url, method)
+        'DPoP': make_token_for(private_key, url, method)
     }
 
     return headers

@@ -17,6 +17,7 @@ from trompasolid.backend.redis_backend import RedisBackend
 from solid import extensions
 from solid import db
 from solid.auth import is_safe_url, LoginForm
+from trompasolid.dpop import make_random_string
 
 backend: Optional[SolidBackend] = None
 
@@ -198,7 +199,7 @@ def web_register():
         print(f"client_id {client_id}")
 
     code_verifier, code_challenge = solid.make_verifier_challenge()
-    state = solid.make_random_string()
+    state = make_random_string()
 
     assert backend.get_state_data(state) is None
     backend.set_state_data(state, code_verifier)
