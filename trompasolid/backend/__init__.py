@@ -40,11 +40,11 @@ class SolidBackend(ABC):
         pass
 
     @abstractmethod
-    def save_configuration_token(self, issuer, sub, token):
+    def save_configuration_token(self, issuer, profile, sub, token):
         pass
 
     @abstractmethod
-    def get_configuration_token(self, issuer, sub):
+    def get_configuration_token(self, issuer, profile):
         pass
 
     @abstractmethod

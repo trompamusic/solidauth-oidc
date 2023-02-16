@@ -75,8 +75,11 @@ class RedisBackend(SolidBackend):
     def save_client_registration(self, provider, client_registration):
         return self.store_redis_dict(make_redis_key(CONFIG_CLIENT_REGISTRATION, provider), client_registration)
 
-    def save_configuration_token(self, issuer, sub, token):
-        return self.store_redis_str(make_redis_key(CONFIG_TOKENS, issuer, sub), token)
+    def save_configuration_token(self, issuer, profile, sub, token):
+        return self.store_redis_str(make_redis_key(CONFIG_TOKENS, issuer, profile), token)
+
+    def get_configuration_token(self, issuer, profile):
+        return self.get_redis_str(make_redis_key(CONFIG_TOKENS, issuer, profile))
 
     def get_state_data(self, state):
         return self.get_redis_str(make_redis_key(CONFIG_STATE, state))

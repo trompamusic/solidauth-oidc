@@ -75,17 +75,18 @@ class DBBackend(SolidBackend):
         self.session.add(cr)
         self.session.commit()
 
-    def save_configuration_token(self, issuer, sub, token):
+    def save_configuration_token(self, issuer, profile, sub, token):
         ct = db.ConfigurationToken(
             issuer=issuer,
+            profile=profile,
             sub=sub,
             data=token
         )
         self.session.add(ct)
         self.session.commit()
 
-    def get_configuration_token(self, issuer, sub):
-        ct = self.session.query(db.ConfigurationToken).filter_by(issuer=issuer, sub=sub).first()
+    def get_configuration_token(self, issuer, profile):
+        ct = self.session.query(db.ConfigurationToken).filter_by(issuer=issuer, profile=profile).first()
         if ct:
             return ct.data
         else:

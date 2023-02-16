@@ -260,9 +260,16 @@ def web_redirect():
 
         claims = json.loads(decoded_id_token.claims)
 
+        if "webid" in claims:
+            # The user's web id should be in the 'webid' key, but this doesn't always exist
+            # (used to be 'sub'). Node Solid Server still uses sub, but other services put a
+            # different value in this field
+            webid = claims["webid"]
+        else:
+            webid = claims["sub"]
         issuer = claims['iss']
         sub = claims['sub']
-        backend.save_configuration_token(issuer, sub, resp)
+        backend.save_configuration_token(issuer, webid, sub, resp)
 
     else:
         print("Error when validating auth callback")

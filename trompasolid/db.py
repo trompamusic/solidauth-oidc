@@ -51,9 +51,13 @@ class ConfigurationToken(Base):
     __tablename__ = 'configuration_token'
     id: Mapped[int] = mapped_column(primary_key=True)
     issuer: Mapped[str] = mapped_column(Text, nullable=False, index=True)
-    sub: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    sub: Mapped[str] = mapped_column(Text, nullable=False)
+    profile: Mapped[str] = mapped_column(Text, nullable=False)
     data: Mapped[dict] = mapped_column(postgresql.JSONB)
-    __table_args__ = (Index('configuration_token_idx_issuer_sub', "issuer", "sub", unique=True), )
+    __table_args__ = (
+        Index('configuration_token_idx_issuer_sub', "issuer", "sub", unique=True),
+        Index('configuration_token_idx_issuer_profile', "issuer", "profile", unique=True)
+    )
 
     def __repr__(self):
         return f'<ConfigurationToken {self.id} ({self.issuer}, {self.sub})>'
