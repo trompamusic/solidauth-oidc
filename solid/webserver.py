@@ -95,7 +95,10 @@ def client_id_url(cid):
 
 @webserver_bp.route("/")
 def web_index():
-    return flask.render_template("index.html")
+    profile_url = request.args.get("profile")
+    if not profile_url:
+        profile_url = ""
+    return flask.render_template("index.html", profile_url=profile_url)
 
 
 @webserver_bp.route('/login', methods=['GET', 'POST'])

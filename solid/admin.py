@@ -25,10 +25,17 @@ class AuthModelView(AuthBaseView, ModelView):
     pass
 
 
+class ClientRegistrationModelView(AuthModelView):
+    column_list = ('provider', 'datax')
+
+    def datax(self, o):
+        return "v"
+
+
 def init_admin():
     import solid.db
     extensions.admin.add_view(AuthModelView(solid.db.User, extensions.db.session))
-    extensions.admin.add_view(AuthModelView(trompasolid.db.ClientRegistration, extensions.db.session))
+    extensions.admin.add_view(ClientRegistrationModelView(trompasolid.db.ClientRegistration, extensions.db.session))
     extensions.admin.add_view(AuthModelView(trompasolid.db.ConfigurationToken, extensions.db.session))
     extensions.admin.add_view(AuthModelView(trompasolid.db.RelyingPartyKey, extensions.db.session))
     extensions.admin.add_view(AuthModelView(trompasolid.db.ResourceServerKeys, extensions.db.session))
