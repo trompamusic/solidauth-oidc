@@ -6,7 +6,7 @@ import jwcrypto.jwk
 import jwcrypto.jwt
 import flask
 import zlib
-from flask import request, current_app, jsonify
+from flask import request, current_app, jsonify, session
 from flask_login import login_user, login_required, logout_user
 
 import solid
@@ -98,6 +98,9 @@ def web_index():
     profile_url = request.args.get("profile")
     if not profile_url:
         profile_url = ""
+    redirect_after = request.args.get("redirect")
+    if redirect_after:
+        session["redirect_after"] = redirect_after
     return flask.render_template("index.html", profile_url=profile_url)
 
 
@@ -280,4 +283,5 @@ def web_redirect():
     # TODO: If we want, we can make the original auth page include a redirect URL field, and redirect the user
     #  back to that when this has finished
     # return flask.redirect(STATE_STORAGE[state].pop('redirect_url'))
-    return flask.render_template("success.html")
+    redirect_after = session.get("redirect_after")
+    return flask.render_template("success.html", redirect_after=redirect_after)
