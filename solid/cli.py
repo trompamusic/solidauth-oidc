@@ -177,3 +177,25 @@ def exchange_auth(provider, code, state):
         print(f"Saved {issuer=}, {sub=}")
     else:
         print("No response - error when exchanging key")
+
+
+@cli_bp.cli.command()
+@click.argument('provider')
+@click.argument('profile')
+def refresh(provider, profile):
+    keypair = solid.load_key(get_backend().get_relying_party_keys())
+    provider_info = get_backend().get_resource_server_configuration(provider)
+
+    configuration_token = get_backend().get_configuration_token(provider, profile)
+    if not configuration_token.has_expired():
+        print("Configuration token has not expired, skipping refresh")
+        return
+
+    client_registration = get_backend().get_client_registration(provider)
+
+    refresh_token = configuration_token.data["refresh_token"]
+    token_data = configuration_token.data
+    token_data.update(refresh_token)
+    resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], token_data)
+
+    get_backend().update_configuration_token(provider, profile, resp)

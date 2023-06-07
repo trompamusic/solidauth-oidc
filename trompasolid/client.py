@@ -18,8 +18,8 @@ def get_bearer_for_user(provider, user, url, method):
     """Given a solid provider, and a user vcard, get the bearer token needed
     to write to this provider as the user."""
 
-    access_keys = backend.get_configuration_token(provider, user)
-    if not access_keys:
+    configuration_token = backend.get_configuration_token(provider, user)
+    if not configuration_token:
         raise ValueError("No configuration for this provider/user")
 
     key = backend.get_relying_party_keys()
@@ -28,6 +28,7 @@ def get_bearer_for_user(provider, user, url, method):
     private_key['alg'] = "RS256"
 
     # TODO: Refresh token when it has expired
+    access_keys = configuration_token.data
     access_token = access_keys['access_token']
 
     headers = {

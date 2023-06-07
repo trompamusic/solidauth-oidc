@@ -1,4 +1,6 @@
-from sqlalchemy import Index, Text
+import datetime
+
+from sqlalchemy import Index, Text, TIMESTAMP, func
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -53,6 +55,7 @@ class ConfigurationToken(Base):
     issuer: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     sub: Mapped[str] = mapped_column(Text, nullable=False)
     profile: Mapped[str] = mapped_column(Text, nullable=False)
+    added: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
     data: Mapped[dict] = mapped_column(postgresql.JSONB)
     __table_args__ = (
         Index('configuration_token_idx_issuer_sub', "issuer", "sub", unique=True),

@@ -1,11 +1,14 @@
+import datetime
+
 import sqlalchemy.exc
 
 from trompasolid.backend import SolidBackend
 from trompasolid import db
+from solid import model
 
 
 class DBBackend(SolidBackend):
-    
+
     def __init__(self, session):
         self.session = session
 
@@ -85,12 +88,25 @@ class DBBackend(SolidBackend):
         self.session.add(ct)
         self.session.commit()
 
+    def update_configuration_token(self, issuer, profile, token):
+        ct = self.session.query(db.ConfigurationToken).filter_by(issuer=issuer, profile=profile).first()
+        if ct:
+            ct.data = token
+            ct.added = datetime.datetime.now(tz=datetime.timezone.utc)
+            self.session.add(ct)
+            self.session.commit()
+
     def get_configuration_token(self, issuer, profile):
         ct = self.session.query(db.ConfigurationToken).filter_by(issuer=issuer, profile=profile).first()
         if ct:
-            return ct.data
+            return model.ConfigurationToken(issuer=ct.issuer, sub=ct.sub, profile=ct.sub, added=ct.added, data=ct.data)
         else:
             return None
+
+    def get_configuration_tokens(self):
+        cts = self.session.query(db.ConfigurationToken).all()
+        return [model.ConfigurationToken(issuer=ct.issuer, sub=ct.sub, profile=ct.sub, added=ct.added, data=ct.data) for
+                ct in cts]
 
     def get_state_data(self, state):
         st = self.session.query(db.State).filter_by(state=state).first()

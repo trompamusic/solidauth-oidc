@@ -194,3 +194,25 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
     except requests.exceptions.HTTPError:
         print(resp.text)
         return None
+
+
+def refresh_auth_token(keypair, provider_info, client_id, refresh_token):
+    # Exchange auth code for access token
+    resp = requests.post(
+        url=provider_info['token_endpoint'],
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+        },
+        headers={
+            "DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")
+        },
+        allow_redirects=False)
+    try:
+        resp.raise_for_status()
+        result = resp.json()
+        return result
+    except requests.exceptions.HTTPError:
+        print(resp.text)
+        return None
