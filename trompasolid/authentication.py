@@ -2,8 +2,9 @@ import json
 import zlib
 
 import jwcrypto.jwt
+import jwcrypto.jwk
 
-import solid
+from trompasolid import solid
 from trompasolid.dpop import make_random_string
 
 
@@ -114,7 +115,9 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, a
     keypair = solid.load_key(backend.get_relying_party_keys())
     assert code_verifier is not None, f"state {state} not in backend?"
 
-    resp = solid.validate_auth_callback(keypair, code_verifier, auth_code, provider_config, client_id, redirect_uri, auth)
+    resp = solid.validate_auth_callback(
+        keypair, code_verifier, auth_code, provider_config, client_id, redirect_uri, auth
+    )
 
     if resp:
         id_token = resp['id_token']

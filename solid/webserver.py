@@ -1,11 +1,6 @@
-import json
 from typing import Optional
 
-import jwcrypto
-import jwcrypto.jwk
-import jwcrypto.jwt
 import flask
-import zlib
 from flask import request, current_app, jsonify, session
 from flask_login import login_user, login_required, logout_user
 
@@ -18,7 +13,6 @@ from trompasolid.backend.redis_backend import RedisBackend
 from solid import extensions
 from solid import db
 from solid.auth import is_safe_url, LoginForm
-from trompasolid.dpop import make_random_string
 
 backend: Optional[SolidBackend] = None
 
@@ -130,14 +124,6 @@ def login():
 def logout():
     logout_user()
     return flask.redirect("/")
-
-
-def get_client_url_for_issuer(baseurl, issuer):
-    if not baseurl.endswith("/"):
-        baseurl += "/"
-    issuer_hash = zlib.adler32(issuer.encode())
-    client_url = baseurl + f"client/{issuer_hash}.jsonld"
-    return client_url
 
 
 @webserver_bp.route("/register", methods=["POST"])
