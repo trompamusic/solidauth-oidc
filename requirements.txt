@@ -15,7 +15,7 @@ defusedxml==0.7.1
 Deprecated==1.2.13
 executing==1.2.0
 Flask==2.2.2
-Flask-Admin @ git+https://github.com/flask-admin/flask-admin.git@c4ba7cc55ea0592f8946fec1138c2841607e33b5
+Flask-Admin==1.6.1
 Flask-Bcrypt==1.0.1
 Flask-Login==0.6.2
 flask-redis==0.4.0

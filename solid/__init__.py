@@ -36,7 +36,7 @@ def lookup_provider_from_profile(profile_url: str):
     try:
         graph.parse(profile_url)
         issuer = rdflib.URIRef("http://www.w3.org/ns/solid/terms#oidcIssuer")
-        triples = list(graph.triples([None, issuer, None]))
+        triples = list(graph.triples((None, issuer, None)))
         if triples:
             # first item in the response, 3rd item in the triple
             return triples[0][2].toPython()

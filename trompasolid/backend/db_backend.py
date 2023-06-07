@@ -3,8 +3,7 @@ import datetime
 import sqlalchemy.exc
 
 from trompasolid.backend import SolidBackend
-from trompasolid import db
-from solid import model
+from trompasolid import db, model
 
 
 class DBBackend(SolidBackend):

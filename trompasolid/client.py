@@ -1,6 +1,5 @@
 import jwcrypto.jwk
 import jwcrypto.jwt
-import requests
 
 from trompasolid.backend import SolidBackend
 from trompasolid.dpop import make_token_for

@@ -26,10 +26,7 @@ class AuthModelView(AuthBaseView, ModelView):
 
 
 class ClientRegistrationModelView(AuthModelView):
-    column_list = ('provider', 'datax')
-
-    def datax(self, o):
-        return "v"
+    column_list = ('provider', 'data')
 
 
 def init_admin():

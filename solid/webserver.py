@@ -11,6 +11,7 @@ from flask_login import login_user, login_required, logout_user
 
 import solid
 from solid.admin import init_admin
+from trompasolid.authentication import generate_authentication_url, NoProviderError, authentication_callback
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
 from trompasolid.backend.redis_backend import RedisBackend
@@ -141,85 +142,23 @@ def get_client_url_for_issuer(baseurl, issuer):
 
 @webserver_bp.route("/register", methods=["POST"])
 def web_register():
-    log_messages = []
 
     webid = request.form.get("webid_or_provider")
 
-    if solid.is_webid(webid):
-        provider = solid.lookup_provider_from_profile(webid)
-    else:
-        provider = webid
+    redirect_url = current_app.config['REDIRECT_URL']
+    always_use_client_url = current_app.config['ALWAYS_USE_CLIENT_URL']
+    try:
+        data = generate_authentication_url(backend, webid, redirect_url, always_use_client_url)
+        provider = data['provider']
+        auth_url = data['auth_url']
+        log_messages = data['log_messages']
 
-    if not provider:
-        print("Cannot find provider, quitting")
-        log_messages.append(f"Cannot find a provider for webid {webid}")
-        return flask.render_template("register.html", log_messages=log_messages)
+        flask.session['provider'] = provider
 
-    log_messages.append(f"Provider for this user is: {provider}")
-    print(f"Provider for this user is: {provider}")
+        return flask.render_template("register.html", log_messages=log_messages, auth_url=auth_url)
 
-    provider_config = backend.get_resource_server_configuration(provider)
-    provider_jwks = backend.get_resource_server_keys(provider)
-    if provider_config and provider_jwks:
-        log_messages.append(f"Configuration for {provider} already exists, skipping setup")
-        print(f"Configuration for {provider} already exists, skipping")
-    else:
-        provider_config = solid.get_openid_configuration(provider)
-        backend.save_resource_server_configuration(provider, provider_config)
-
-        keys = solid.load_op_jwks(provider_config)
-        backend.save_resource_server_keys(provider, keys)
-
-        log_messages.append("Got configuration and jwks for provider")
-
-    do_dynamic_registration = solid.op_can_do_dynamic_registration(provider_config) and not current_app.config['ALWAYS_USE_CLIENT_URL']
-    print("Can do dynamic:", solid.op_can_do_dynamic_registration(provider_config))
-
-    # By default, try and do dynamic registration.
-    # If the OP can't do it, send a client URL
-    # If ALWAYS_USE_CLIENT_URL is True, send a client URL
-
-    if do_dynamic_registration:
-        log_messages.append(f"Requested to do dynamic client registration")
-        print(f"Requested to do dynamic client registration")
-        client_registration = backend.get_client_registration(provider)
-        if client_registration:
-            # TODO: Check if redirect url is the same as the one configured here
-            log_messages.append(f"Registration for {provider} already exists, skipping")
-            print(f"Registration for {provider} already exists, skipping")
-        else:
-            client_registration = solid.dynamic_registration(provider, current_app.config['REDIRECT_URL'], provider_config)
-            backend.save_client_registration(provider, client_registration)
-
-            log_messages.append("Registered client with provider")
-        client_id = client_registration["client_id"]
-    else:
-        log_messages.append(f"Requested to use client URL for requests")
-        print(f"Requested to use client URL for requests")
-
-        # TODO: For now, generate a random URL based on the issuer + a basic hash.
-        #  For testing this might need to be semi-random in case the provider caches it
-        issuer = provider_config["issuer"]
-        client_id = get_client_url_for_issuer(current_app.config['BASE_URL'], issuer)
-        log_messages.append(f"client_id {client_id}")
-        print(f"client_id {client_id}")
-
-    code_verifier, code_challenge = solid.make_verifier_challenge()
-    state = make_random_string()
-
-    assert backend.get_state_data(state) is None
-    backend.set_state_data(state, code_verifier)
-
-    auth_url = solid.generate_authorization_request(
-        provider_config, current_app.config['REDIRECT_URL'],
-        client_id,
-        state, code_challenge
-    )
-    log_messages.append("Got an auth url")
-
-    flask.session['provider'] = provider
-
-    return flask.render_template("register.html", log_messages=log_messages, auth_url=auth_url)
+    except NoProviderError as e:
+        return flask.render_template("register.html", log_messages=[str(e)])
 
 
 @webserver_bp.route("/redirect")
@@ -228,60 +167,17 @@ def web_redirect():
     state = flask.request.args.get('state')
 
     provider = flask.session['provider']
-    provider_config = backend.get_resource_server_configuration(provider)
-
-    do_dynamic_registration = solid.op_can_do_dynamic_registration(provider_config) and not current_app.config['ALWAYS_USE_CLIENT_URL']
-    if do_dynamic_registration:
-        client_registration = backend.get_client_registration(provider)
-        if not client_registration:
-            raise Exception("Expected to find a registration for a backend but can't get one")
-        client_id = client_registration["client_id"]
-        client_secret = client_registration["client_secret"]
-        auth = (client_id, client_secret)
-    else:
-        issuer = provider_config["issuer"]
-        client_id = get_client_url_for_issuer(current_app.config['BASE_URL'], issuer)
-        auth = None
 
     redirect_uri = current_app.config['REDIRECT_URL']
+    always_use_client_url = current_app.config['ALWAYS_USE_CLIENT_URL']
+    success = authentication_callback(backend, auth_code, state, provider, redirect_uri, always_use_client_url)
 
-    code_verifier = backend.get_state_data(state)
-
-    keypair = solid.load_key(backend.get_relying_party_keys())
-    assert code_verifier is not None, f"state {state} not in backend?"
-
-    resp = solid.validate_auth_callback(keypair, code_verifier, auth_code, provider_config, client_id, redirect_uri, auth)
-
-    if resp:
-        id_token = resp['id_token']
-        server_key = backend.get_resource_server_keys(provider)
-        # TODO: It seems like a server may give more than one key, is this the correct one?
-        # TODO: We need to load the jwt, and from its header find the "kid" (key id) parameter
-        #  from this, we can load through the list of server_key keys and find the key with this keyid
-        #  and then use that key to validate the message
-        key = server_key['keys'][0]
-        key = jwcrypto.jwk.JWK.from_json(json.dumps(key))
-        decoded_id_token = jwcrypto.jwt.JWT()
-        decoded_id_token.deserialize(id_token, key=key)
-
-        claims = json.loads(decoded_id_token.claims)
-
-        if "webid" in claims:
-            # The user's web id should be in the 'webid' key, but this doesn't always exist
-            # (used to be 'sub'). Node Solid Server still uses sub, but other services put a
-            # different value in this field
-            webid = claims["webid"]
-        else:
-            webid = claims["sub"]
-        issuer = claims['iss']
-        sub = claims['sub']
-        backend.save_configuration_token(issuer, webid, sub, resp)
-
+    if success:
+        # TODO: If we want, we can make the original auth page include a redirect URL field, and redirect the user
+        #  back to that when this has finished
+        # return flask.redirect(STATE_STORAGE[state].pop('redirect_url'))
+        redirect_after = session.get("redirect_after")
+        return flask.render_template("success.html", redirect_after=redirect_after)
     else:
         print("Error when validating auth callback")
-
-    # TODO: If we want, we can make the original auth page include a redirect URL field, and redirect the user
-    #  back to that when this has finished
-    # return flask.redirect(STATE_STORAGE[state].pop('redirect_url'))
-    redirect_after = session.get("redirect_after")
-    return flask.render_template("success.html", redirect_after=redirect_after)
+        return "Error when validating auth callback", 500
