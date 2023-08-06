@@ -31,10 +31,12 @@ def get_bearer_for_user(provider, profile, url, method):
         token_data.update({"refresh_token": refresh_token})
         keypair = solid.load_key(backend.get_relying_party_keys())
         provider_info = backend.get_resource_server_configuration(provider)
-        resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], token_data)
-
-        backend.update_configuration_token(provider, profile, resp)
-        print("... refreshed")
+        status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], token_data)
+        if status:
+            backend.update_configuration_token(provider, profile, resp)
+            print("... refreshed")
+        else:
+            print("... refresh failed")
 
     key = backend.get_relying_party_keys()
     private_key = jwcrypto.jwk.JWK.from_json(key)

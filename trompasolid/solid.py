@@ -190,10 +190,13 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
     try:
         resp.raise_for_status()
         result = resp.json()
-        return result
+        return True, result
     except requests.exceptions.HTTPError:
-        print(resp.text)
-        return None
+        try:
+            data = resp.json()
+        except ValueError:
+            data = resp.text
+        return False, data
 
 
 def refresh_auth_token(keypair, provider_info, client_id, refresh_token):
@@ -212,8 +215,12 @@ def refresh_auth_token(keypair, provider_info, client_id, refresh_token):
     try:
         resp.raise_for_status()
         result = resp.json()
-        return result
+        return True, result
     except requests.exceptions.HTTPError:
         print("Error refreshing token:")
         print(resp.text)
-        return None
+        try:
+            data = resp.json()
+        except ValueError:
+            data = resp.text
+        return False, data

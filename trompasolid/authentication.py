@@ -115,11 +115,11 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, a
     keypair = solid.load_key(backend.get_relying_party_keys())
     assert code_verifier is not None, f"state {state} not in backend?"
 
-    resp = solid.validate_auth_callback(
+    success, resp = solid.validate_auth_callback(
         keypair, code_verifier, auth_code, provider_config, client_id, redirect_uri, auth
     )
 
-    if resp:
+    if success:
         id_token = resp['id_token']
         server_key = backend.get_resource_server_keys(provider)
         # TODO: It seems like a server may give more than one key, is this the correct one?

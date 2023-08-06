@@ -5,7 +5,7 @@ import jwcrypto.jwk
 import jwcrypto.jwt
 from flask import Blueprint, current_app
 
-import solid
+from trompasolid import solid
 from solid import extensions
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
@@ -155,9 +155,9 @@ def exchange_auth(provider, code, state):
     client_id = client_registration['client_id']
     client_secret = client_registration['client_secret']
     auth = (client_id, client_secret)
-    resp = solid.validate_auth_callback(signing_algorithm, keypair, code_verifier, code, provider_config, client_id, redirect_uri, auth=auth)
+    success, resp = solid.validate_auth_callback(signing_algorithm, keypair, code_verifier, code, provider_config, client_id, redirect_uri, auth=auth)
 
-    if resp:
+    if success:
         print(resp)
         id_token = resp['id_token']
         server_key = get_backend().get_resource_server_keys(provider)
@@ -173,7 +173,7 @@ def exchange_auth(provider, code, state):
         sub = claims['sub']
         print(claims)
 
-        get_backend().save_configuration_token(issuer, sub, resp)
+        get_backend().save_configuration_token(issuer, profile=sub, sub=sub, token=resp)
         print(f"Saved {issuer=}, {sub=}")
     else:
         print("No response - error when exchanging key")
@@ -196,6 +196,6 @@ def refresh(provider, profile):
     refresh_token = configuration_token.data["refresh_token"]
     token_data = configuration_token.data
     token_data.update(refresh_token)
-    resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], token_data)
+    status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], token_data)
 
     get_backend().update_configuration_token(provider, profile, resp)
