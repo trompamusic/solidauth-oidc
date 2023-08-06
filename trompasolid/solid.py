@@ -214,5 +214,6 @@ def refresh_auth_token(keypair, provider_info, client_id, refresh_token):
         result = resp.json()
         return result
     except requests.exceptions.HTTPError:
+        print("Error refreshing token:")
         print(resp.text)
         return None
