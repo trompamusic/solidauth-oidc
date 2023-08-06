@@ -143,7 +143,7 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, a
         issuer = claims['iss']
         sub = claims['sub']
         backend.save_configuration_token(issuer, webid, sub, resp)
-        return True
+        return True, resp
     else:
         print("Error when validating auth callback")
-        return False
+        return False, resp

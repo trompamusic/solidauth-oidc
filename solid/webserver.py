@@ -156,7 +156,7 @@ def web_redirect():
 
     redirect_uri = current_app.config['REDIRECT_URL']
     always_use_client_url = current_app.config['ALWAYS_USE_CLIENT_URL']
-    success = authentication_callback(backend, auth_code, state, provider, redirect_uri, always_use_client_url)
+    success, data = authentication_callback(backend, auth_code, state, provider, redirect_uri, always_use_client_url)
 
     if success:
         # TODO: If we want, we can make the original auth page include a redirect URL field, and redirect the user
