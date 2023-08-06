@@ -78,14 +78,20 @@ class DBBackend(SolidBackend):
         self.session.commit()
 
     def save_configuration_token(self, issuer, profile, sub, token):
-        ct = db.ConfigurationToken(
-            issuer=issuer,
-            profile=profile,
-            sub=sub,
-            data=token
-        )
-        self.session.add(ct)
-        self.session.commit()
+        # In the case that the token already exists, update it
+        existing_token = self.get_configuration_token(issuer, profile)
+        if existing_token:
+            self.update_configuration_token(issuer, profile, token)
+            return
+        else:
+            ct = db.ConfigurationToken(
+                issuer=issuer,
+                profile=profile,
+                sub=sub,
+                data=token
+            )
+            self.session.merge(ct)
+            self.session.commit()
 
     def update_configuration_token(self, issuer, profile, token):
         ct = self.session.query(db.ConfigurationToken).filter_by(issuer=issuer, profile=profile).first()
