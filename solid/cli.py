@@ -180,9 +180,11 @@ def exchange_auth(provider, code, state):
 
 
 @cli_bp.cli.command()
-@click.argument('provider')
 @click.argument('profile')
-def refresh(provider, profile):
+def refresh(profile):
+    provider = solid.lookup_provider_from_profile(profile)
+    print(f"{profile=}")
+    print(f"{provider=}")
     keypair = solid.load_key(get_backend().get_relying_party_keys())
     provider_info = get_backend().get_resource_server_configuration(provider)
 
@@ -194,8 +196,11 @@ def refresh(provider, profile):
     client_registration = get_backend().get_client_registration(provider)
 
     refresh_token = configuration_token.data["refresh_token"]
-    token_data = configuration_token.data
-    token_data.update(refresh_token)
-    status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], token_data)
+    status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], refresh_token)
 
-    get_backend().update_configuration_token(provider, profile, resp)
+    if status and False:
+        resp.update({"refresh_token": refresh_token})
+        get_backend().update_configuration_token(provider, profile, resp)
+        print("Token updated")
+    else:
+        print(f"Failure updating token: {status}")

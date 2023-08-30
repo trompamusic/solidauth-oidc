@@ -27,12 +27,11 @@ def get_bearer_for_user(provider, profile, url, method):
         client_registration = backend.get_client_registration(provider)
 
         refresh_token = configuration_token.data["refresh_token"]
-        token_data = configuration_token.data
-        token_data.update({"refresh_token": refresh_token})
         keypair = solid.load_key(backend.get_relying_party_keys())
         provider_info = backend.get_resource_server_configuration(provider)
-        status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], token_data)
+        status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], refresh_token)
         if status:
+            resp.update({"refresh_token": refresh_token})
             backend.update_configuration_token(provider, profile, resp)
             print("... refreshed")
         else:
