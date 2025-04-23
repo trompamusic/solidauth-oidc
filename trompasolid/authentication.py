@@ -1,8 +1,8 @@
 import json
 import zlib
 
-import jwcrypto.jwt
 import jwcrypto.jwk
+import jwcrypto.jwt
 
 from trompasolid import solid
 from trompasolid.dpop import make_random_string
@@ -42,6 +42,8 @@ def generate_authentication_url(backend, webid, redirect_url, always_use_client_
         print(f"Configuration for {provider} already exists, skipping")
     else:
         provider_config = solid.get_openid_configuration(provider)
+        # Get the canonical provider url from the openid configuration (e.g. https://solidcommunity.net vs https://solidcommunity.net/)
+        provider = provider_config.get("issuer", provider)
         backend.save_resource_server_configuration(provider, provider_config)
 
         keys = solid.load_op_jwks(provider_config)

@@ -5,8 +5,8 @@ import jwcrypto.jwk
 import jwcrypto.jwt
 from flask import Blueprint, current_app
 
-from trompasolid import solid
 from solid import extensions
+from trompasolid import solid
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
 from trompasolid.backend.redis_backend import RedisBackend
@@ -57,6 +57,8 @@ def lookup_op_configuration(profileurl):
         return
 
     openid_conf = solid.get_openid_configuration(provider)
+    # Get the canonical provider url from the openid configuration (e.g. https://solidcommunity.net vs https://solidcommunity.net/)
+    provider = openid_conf.get("issuer", provider)
     get_backend().save_resource_server_configuration(provider, openid_conf)
 
     provider_keys = solid.load_op_jwks(openid_conf)
@@ -76,6 +78,8 @@ def get_provider_configuration(provider):
         return
 
     openid_conf = solid.get_openid_configuration(provider)
+    # Get the canonical provider url from the openid configuration (e.g. https://solidcommunity.net vs https://solidcommunity.net/)
+    provider = openid_conf.get("issuer", provider)
     get_backend().save_resource_server_configuration(provider, openid_conf)
 
     provider_keys = solid.load_op_jwks(openid_conf)
