@@ -3,11 +3,11 @@ import hashlib
 import urllib.parse
 from urllib.error import HTTPError
 
+import jwcrypto.jwk
+import jwcrypto.jwt
 import rdflib
 import requests
 import requests.utils
-import jwcrypto.jwk
-import jwcrypto.jwt
 from oic.oic import Client as OicClient
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
@@ -21,7 +21,7 @@ def lookup_provider_from_profile(profile_url: str):
     :return:
     """
 
-    r = requests.options(profile_url)
+    r = requests.options(profile_url, timeout=10)
     r.raise_for_status()
     links = r.headers.get("Link")
     if links:
@@ -52,7 +52,7 @@ def is_webid(url: str):
 
     # TODO: Duplicates `lookup_provider_from_profile`
     # TODO: If we do this once, we can take advantage of it and also get the values
-    r = requests.options(url)
+    r = requests.options(url, timeout=10)
     r.raise_for_status()
     links = r.headers.get("Link")
     if links:
@@ -91,7 +91,7 @@ def get_openid_configuration(op_url):
     else:
         url = op_url + "/" + path
 
-    r = requests.get(url, verify=False)
+    r = requests.get(url, timeout=10)
     r.raise_for_status()
     return r.json()
 
@@ -104,7 +104,7 @@ def load_op_jwks(op_config):
     """
     if "jwks_uri" not in op_config:
         raise ValueError("Cannot find 'jwks_uri'")
-    r = requests.get(op_config["jwks_uri"], verify=False)
+    r = requests.get(op_config["jwks_uri"], timeout=10)
     r.raise_for_status()
     return r.json()
 
@@ -186,6 +186,7 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
         #  NSS doesn't seem to have this problem
         auth=auth,
         allow_redirects=False,
+        timeout=10,
     )
     try:
         resp.raise_for_status()
@@ -210,6 +211,7 @@ def refresh_auth_token(keypair, provider_info, client_id, refresh_token):
         },
         headers={"DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")},
         allow_redirects=False,
+        timeout=10,
     )
     try:
         resp.raise_for_status()
