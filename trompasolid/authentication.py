@@ -57,7 +57,7 @@ def generate_authentication_url(backend, webid, redirect_url, always_use_client_
     # If ALWAYS_USE_CLIENT_URL is True, send a client URL
 
     if do_dynamic_registration:
-        log_messages.append(f"Requested to do dynamic client registration")
+        log_messages.append("Requested to do dynamic client registration")
         client_registration = backend.get_client_registration(provider)
         if client_registration:
             # TODO: Check if redirect url is the same as the one configured here
@@ -69,7 +69,7 @@ def generate_authentication_url(backend, webid, redirect_url, always_use_client_
             log_messages.append("Registered client with provider")
         client_id = client_registration["client_id"]
     else:
-        log_messages.append(f"Requested to use client URL for requests")
+        log_messages.append("Requested to use client URL for requests")
 
         # TODO: For now, generate a random URL based on the issuer + a basic hash.
         #  For testing this might need to be semi-random in case the provider caches it

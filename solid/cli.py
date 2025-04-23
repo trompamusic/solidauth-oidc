@@ -105,7 +105,7 @@ def register(provider):
     print("Can do dynamic:", solid.op_can_do_dynamic_registration(provider_config))
 
     if do_dynamic_registration:
-        print(f"Requested to do dynamic client registration")
+        print("Requested to do dynamic client registration")
         client_registration = get_backend().get_client_registration(provider)
         if client_registration:
             print(f"Registration for {provider} already exists, skipping")

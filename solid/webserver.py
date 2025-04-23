@@ -4,12 +4,12 @@ import flask
 from flask import request, current_app, jsonify, session
 from flask_login import login_user, login_required, logout_user
 
-import solid
 from solid.admin import init_admin
 from trompasolid.authentication import generate_authentication_url, NoProviderError, authentication_callback
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
 from trompasolid.backend.redis_backend import RedisBackend
+import trompasolid.solid
 from solid import extensions
 from solid import db
 from solid.auth import is_safe_url, LoginForm
