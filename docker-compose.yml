@@ -1,5 +1,3 @@
-version: "3.4"
-
 volumes:
   redis:
   # The contents of /root, so that bash and ipython can store history
