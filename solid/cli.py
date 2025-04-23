@@ -65,6 +65,25 @@ def lookup_op_configuration(profileurl):
 
 @cli_bp.cli.command()
 @click.argument("provider")
+def get_provider_configuration(provider):
+    """Step 2b if not using step 2, just get the provider configuration without knowing the user's profile"""
+
+    provider_configuration = get_backend().get_resource_server_configuration(provider)
+    provider_keys = get_backend().get_resource_server_keys(provider)
+
+    if provider_configuration and provider_keys:
+        print(f"Configuration for {provider} already exists, quitting")
+        return
+
+    openid_conf = solid.get_openid_configuration(provider)
+    get_backend().save_resource_server_configuration(provider, openid_conf)
+
+    provider_keys = solid.load_op_jwks(openid_conf)
+    get_backend().save_resource_server_keys(provider, provider_keys)
+
+
+@cli_bp.cli.command()
+@click.argument("provider")
 def register(provider):
     """Step 3, Register with the OP.
     Pass in the provider url from `lookup-op`"""
@@ -72,7 +91,9 @@ def register(provider):
     provider_config = get_backend().get_resource_server_configuration(provider)
 
     if not provider_config:
-        print("No configuration exists for this provider, use `lookup-op` first")
+        print(
+            "No configuration exists for this provider, use `lookup-op` or `get-provider-configuration` first"
+        )
         return
 
     existing_registration = get_backend().get_client_registration(provider)

@@ -41,7 +41,7 @@ def create_app():
         if backend.is_ready():
             if not backend.get_relying_party_keys():
                 print("On startup generating new RP keys")
-                new_key = solid.generate_keys()
+                new_key = trompasolid.solid.generate_keys()
                 backend.save_relying_party_keys(new_key)
         else:
             print("Warning: Backend isn't ready yet")
@@ -149,14 +149,20 @@ def web_register():
 
 @webserver_bp.route("/redirect")
 def web_redirect():
-    auth_code = flask.request.args.get('code')
-    state = flask.request.args.get('state')
+    auth_code = flask.request.args.get("code")
+    state = flask.request.args.get("state")
+    iss = flask.request.args.get("iss")
 
-    provider = flask.session['provider']
+    if iss:
+        provider = iss
+    else:
+        provider = flask.session["provider"]
 
-    redirect_uri = current_app.config['REDIRECT_URL']
-    always_use_client_url = current_app.config['ALWAYS_USE_CLIENT_URL']
-    success, data = authentication_callback(backend, auth_code, state, provider, redirect_uri, always_use_client_url)
+    redirect_uri = current_app.config["REDIRECT_URL"]
+    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
+    success, data = authentication_callback(
+        backend, auth_code, state, provider, redirect_uri, always_use_client_url
+    )
 
     if success:
         # TODO: If we want, we can make the original auth page include a redirect URL field, and redirect the user
