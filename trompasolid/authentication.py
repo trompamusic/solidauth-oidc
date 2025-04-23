@@ -83,12 +83,7 @@ def generate_authentication_url(backend, webid, redirect_url, always_use_client_
     assert backend.get_state_data(state) is None
     backend.set_state_data(state, code_verifier)
 
-    auth_url = solid.generate_authorization_request(
-        provider_config,
-        redirect_url,
-        client_id,
-        state, code_challenge
-    )
+    auth_url = solid.generate_authorization_request(provider_config, redirect_url, client_id, state, code_challenge)
     log_messages.append(f"Got an auth url: {auth_url}")
 
     return {"provider": provider, "auth_url": auth_url, "log_messages": log_messages}
@@ -120,13 +115,13 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, a
     )
 
     if success:
-        id_token = resp['id_token']
+        id_token = resp["id_token"]
         server_key = backend.get_resource_server_keys(provider)
         # TODO: It seems like a server may give more than one key, is this the correct one?
         # TODO: We need to load the jwt, and from its header find the "kid" (key id) parameter
         #  from this, we can load through the list of server_key keys and find the key with this keyid
         #  and then use that key to validate the message
-        key = server_key['keys'][0]
+        key = server_key["keys"][0]
         key = jwcrypto.jwk.JWK.from_json(json.dumps(key))
         decoded_id_token = jwcrypto.jwt.JWT()
         decoded_id_token.deserialize(id_token, key=key)
@@ -140,8 +135,8 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, a
             webid = claims["webid"]
         else:
             webid = claims["sub"]
-        issuer = claims['iss']
-        sub = claims['sub']
+        issuer = claims["iss"]
+        sub = claims["sub"]
         backend.save_configuration_token(issuer, webid, sub, resp)
         return True, resp
     else:

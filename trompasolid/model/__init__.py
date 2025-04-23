@@ -31,7 +31,7 @@ class ConfigurationToken:
     data: dict
 
     def has_expired(self):
-        expires_in = self.data['expires_in']
+        expires_in = self.data["expires_in"]
         now = datetime.datetime.now(tz=datetime.timezone.utc)
         if self.added + datetime.timedelta(seconds=expires_in) < now:
             return True

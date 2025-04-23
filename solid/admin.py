@@ -14,7 +14,7 @@ class AuthBaseView(BaseView):
 
     def inaccessible_callback(self, name, **kwargs):
         # redirect to login page if user doesn't have access
-        return redirect(url_for('register.login', next=request.url))
+        return redirect(url_for("register.login", next=request.url))
 
 
 class AuthIndexView(AuthBaseView, AdminIndexView):
@@ -26,11 +26,12 @@ class AuthModelView(AuthBaseView, ModelView):
 
 
 class ClientRegistrationModelView(AuthModelView):
-    column_list = ('provider', 'data')
+    column_list = ("provider", "data")
 
 
 def init_admin():
     import solid.db
+
     extensions.admin.add_view(AuthModelView(solid.db.User, extensions.db.session))
     extensions.admin.add_view(ClientRegistrationModelView(trompasolid.db.ClientRegistration, extensions.db.session))
     extensions.admin.add_view(AuthModelView(trompasolid.db.ConfigurationToken, extensions.db.session))

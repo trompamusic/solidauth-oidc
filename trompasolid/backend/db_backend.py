@@ -7,7 +7,6 @@ from trompasolid import db, model
 
 
 class DBBackend(SolidBackend):
-
     def __init__(self, session):
         self.session = session
 
@@ -40,10 +39,7 @@ class DBBackend(SolidBackend):
             return None
 
     def save_resource_server_configuration(self, provider, configuration):
-        rsc = db.ResourceServerConfiguration(
-            provider=provider,
-            data=configuration
-        )
+        rsc = db.ResourceServerConfiguration(provider=provider, data=configuration)
         self.session.add(rsc)
         self.session.commit()
 
@@ -55,10 +51,7 @@ class DBBackend(SolidBackend):
             return None
 
     def save_resource_server_keys(self, provider, keys):
-        rsk = db.ResourceServerKeys(
-            provider=provider,
-            data=keys
-        )
+        rsk = db.ResourceServerKeys(provider=provider, data=keys)
         self.session.add(rsk)
         self.session.commit()
 
@@ -70,10 +63,7 @@ class DBBackend(SolidBackend):
             return None
 
     def save_client_registration(self, provider, registration):
-        cr = db.ClientRegistration(
-            provider=provider,
-            data=registration
-        )
+        cr = db.ClientRegistration(provider=provider, data=registration)
         self.session.add(cr)
         self.session.commit()
 
@@ -84,12 +74,7 @@ class DBBackend(SolidBackend):
             self.update_configuration_token(issuer, profile, token)
             return
         else:
-            ct = db.ConfigurationToken(
-                issuer=issuer,
-                profile=profile,
-                sub=sub,
-                data=token
-            )
+            ct = db.ConfigurationToken(issuer=issuer, profile=profile, sub=sub, data=token)
             self.session.merge(ct)
             self.session.commit()
 
@@ -110,8 +95,10 @@ class DBBackend(SolidBackend):
 
     def get_configuration_tokens(self):
         cts = self.session.query(db.ConfigurationToken).all()
-        return [model.ConfigurationToken(issuer=ct.issuer, sub=ct.sub, profile=ct.sub, added=ct.added, data=ct.data) for
-                ct in cts]
+        return [
+            model.ConfigurationToken(issuer=ct.issuer, sub=ct.sub, profile=ct.sub, added=ct.added, data=ct.data)
+            for ct in cts
+        ]
 
     def get_state_data(self, state):
         st = self.session.query(db.State).filter_by(state=state).first()
@@ -127,9 +114,6 @@ class DBBackend(SolidBackend):
             self.session.commit()
 
     def set_state_data(self, state, code_verifier):
-        st = db.State(
-            state=state,
-            code_verifier=code_verifier
-        )
+        st = db.State(state=state, code_verifier=code_verifier)
         self.session.add(st)
         self.session.commit()

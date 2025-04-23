@@ -22,7 +22,7 @@ def get_bearer_for_user(provider, profile, url, method):
     if not configuration_token:
         raise ValueError("No configuration for this provider/user")
 
-    access_token = configuration_token.data['access_token']
+    access_token = configuration_token.data["access_token"]
 
     if configuration_token.has_expired():
         print(f"Token for {profile} has expired, refreshing")
@@ -34,7 +34,7 @@ def get_bearer_for_user(provider, profile, url, method):
         status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], refresh_token)
         if status:
             resp.update({"refresh_token": refresh_token})
-            access_token = resp['access_token']
+            access_token = resp["access_token"]
             backend.update_configuration_token(provider, profile, resp)
             print("... refreshed")
         else:
@@ -43,11 +43,8 @@ def get_bearer_for_user(provider, profile, url, method):
     key = backend.get_relying_party_keys()
     private_key = jwcrypto.jwk.JWK.from_json(key)
     # CSS Fails with a cryptic error if this field doesn't exist
-    private_key['alg'] = "RS256"
+    private_key["alg"] = "RS256"
 
-    headers = {
-        'Authorization': ('DPoP ' + access_token),
-        'DPoP': make_token_for(private_key, url, method)
-    }
+    headers = {"Authorization": ("DPoP " + access_token), "DPoP": make_token_for(private_key, url, method)}
 
     return headers

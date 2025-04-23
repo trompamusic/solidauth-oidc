@@ -23,12 +23,12 @@ def lookup_provider_from_profile(profile_url: str):
 
     r = requests.options(profile_url)
     r.raise_for_status()
-    links = r.headers.get('Link')
+    links = r.headers.get("Link")
     if links:
         parsed_links = requests.utils.parse_header_links(links)
         for l in parsed_links:
-            if l.get('rel') == 'http://openid.net/specs/connect/1.0/issuer':
-                return l['url']
+            if l.get("rel") == "http://openid.net/specs/connect/1.0/issuer":
+                return l["url"]
 
     # If we get here, there was no rel in the options. Instead, try and get the card
     # and find its issuer
@@ -54,11 +54,11 @@ def is_webid(url: str):
     # TODO: If we do this once, we can take advantage of it and also get the values
     r = requests.options(url)
     r.raise_for_status()
-    links = r.headers.get('Link')
+    links = r.headers.get("Link")
     if links:
         parsed_links = requests.utils.parse_header_links(links)
         for l in parsed_links:
-            if l.get('rel') == 'http://openid.net/specs/connect/1.0/issuer':
+            if l.get("rel") == "http://openid.net/specs/connect/1.0/issuer":
                 return True
 
     # If we get here, there was no rel in the options. Instead, try and get the card
@@ -114,7 +114,7 @@ def generate_keys():
 
     Returns a string containing the json export of the private key
     """
-    key = jwcrypto.jwk.JWK.generate(kty='EC', crv='P-256')
+    key = jwcrypto.jwk.JWK.generate(kty="EC", crv="P-256")
     return key.export_private()
 
 
@@ -131,10 +131,9 @@ def dynamic_registration(provider, redirect_url, op_config):
     if "registration_endpoint" not in op_config:
         raise ValueError("Cannot find 'registration_endpoint'")
 
-    registration_response = OicClient(
-        client_authn_method=CLIENT_AUTHN_METHOD).register(
-            op_config['registration_endpoint'],
-            redirect_uris=[redirect_url])
+    registration_response = OicClient(client_authn_method=CLIENT_AUTHN_METHOD).register(
+        op_config["registration_endpoint"], redirect_uris=[redirect_url]
+    )
     print("Registration response:", registration_response)
     return registration_response.to_dict()
 
@@ -142,9 +141,9 @@ def dynamic_registration(provider, redirect_url, op_config):
 def make_verifier_challenge():
     code_verifier = make_random_string()
 
-    code_challenge = hashlib.sha256(code_verifier.encode('utf-8')).digest()
-    code_challenge = base64.urlsafe_b64encode(code_challenge).decode('utf-8')
-    code_challenge = code_challenge.replace('=', '')
+    code_challenge = hashlib.sha256(code_verifier.encode("utf-8")).digest()
+    code_challenge = base64.urlsafe_b64encode(code_challenge).decode("utf-8")
+    code_challenge = code_challenge.replace("=", "")
 
     return code_verifier, code_challenge
 
@@ -152,25 +151,27 @@ def make_verifier_challenge():
 def generate_authorization_request(configuration, redirect_url, client_id, state, code_challenge):
     auth_url = configuration["authorization_endpoint"]
 
-    query = urllib.parse.urlencode({
-        "response_type": "code",
-        "redirect_uri": redirect_url,
-        "code_challenge": code_challenge,
-        "state": state,
-        "code_challenge_method": "S256",
-        "client_id": client_id,
-        # offline_access: also asks for refresh token
-        "scope": "openid webid offline_access",
-    })
+    query = urllib.parse.urlencode(
+        {
+            "response_type": "code",
+            "redirect_uri": redirect_url,
+            "code_challenge": code_challenge,
+            "state": state,
+            "code_challenge_method": "S256",
+            "client_id": client_id,
+            # offline_access: also asks for refresh token
+            "scope": "openid webid offline_access",
+        }
+    )
 
-    url = auth_url + '?' + query
+    url = auth_url + "?" + query
     return url
 
 
 def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, client_id, redirect_uri, auth=None):
     # Exchange auth code for access token
     resp = requests.post(
-        url=provider_info['token_endpoint'],
+        url=provider_info["token_endpoint"],
         data={
             "grant_type": "authorization_code",
             "client_id": client_id,
@@ -178,15 +179,14 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
             "code": auth_code,
             "code_verifier": code_verifier,
         },
-        headers={
-            "DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")
-        },
+        headers={"DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")},
         # TODO: Community Solid Server seems to think that we're doing Basic Auth with the client id
         #  and secret, even though with my understanding, PKCE means that it's unnecessary. Unsure of if
         #  this is due to CSS or something during dynamic registration
         #  NSS doesn't seem to have this problem
         auth=auth,
-        allow_redirects=False)
+        allow_redirects=False,
+    )
     try:
         resp.raise_for_status()
         result = resp.json()
@@ -202,16 +202,15 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
 def refresh_auth_token(keypair, provider_info, client_id, refresh_token):
     # Exchange auth code for access token
     resp = requests.post(
-        url=provider_info['token_endpoint'],
+        url=provider_info["token_endpoint"],
         data={
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
             "client_id": client_id,
         },
-        headers={
-            "DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")
-        },
-        allow_redirects=False)
+        headers={"DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")},
+        allow_redirects=False,
+    )
     try:
         resp.raise_for_status()
         result = resp.json()

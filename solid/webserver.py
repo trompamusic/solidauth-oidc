@@ -49,7 +49,7 @@ def create_app():
     return app
 
 
-webserver_bp = flask.Blueprint('register', __name__)
+webserver_bp = flask.Blueprint("register", __name__)
 
 
 @webserver_bp.route("/logo.png")
@@ -62,16 +62,15 @@ def client_id_url(cid):
     # In Solid-OIDC you can register a client by having the "client_id" field be a URL to a json-ld document
     # It's normally recommended that this is a static file, but for simplicity serve it from flask
 
-    baseurl = current_app.config['BASE_URL']
+    baseurl = current_app.config["BASE_URL"]
     if not baseurl.endswith("/"):
         baseurl += "/"
 
     client_information = {
         "@context": ["https://www.w3.org/ns/solid/oidc-context.jsonld"],
-
         "client_id": baseurl + f"client/{cid}.jsonld",
         "client_name": "Alastair's cool test application",
-        "redirect_uris": [current_app.config['REDIRECT_URL']],
+        "redirect_uris": [current_app.config["REDIRECT_URL"]],
         "post_logout_redirect_uris": [baseurl + "logout"],
         "client_uri": baseurl,
         "logo_uri": baseurl + "logo.png",
@@ -80,7 +79,7 @@ def client_id_url(cid):
         "grant_types": ["refresh_token", "authorization_code"],
         "response_types": ["code"],
         "default_max_age": 3600,
-        "require_auth_time": True
+        "require_auth_time": True,
     }
 
     response = jsonify(client_information)
@@ -99,7 +98,7 @@ def web_index():
     return flask.render_template("index.html", profile_url=profile_url)
 
 
-@webserver_bp.route('/login', methods=['GET', 'POST'])
+@webserver_bp.route("/login", methods=["GET", "POST"])
 def login():
     form = LoginForm()
     if form.validate_on_submit():
@@ -107,16 +106,16 @@ def login():
 
         login_user(form.user)
 
-        flask.flash('Logged in successfully.')
+        flask.flash("Logged in successfully.")
 
-        next = request.args.get('next')
+        next = request.args.get("next")
         # is_safe_url should check if the url is safe for redirects.
         # See http://flask.pocoo.org/snippets/62/ for an example.
         if not is_safe_url(next):
             return flask.abort(400)
 
-        return flask.redirect(next or flask.url_for('admin.index'))
-    return flask.render_template('login.html', form=form)
+        return flask.redirect(next or flask.url_for("admin.index"))
+    return flask.render_template("login.html", form=form)
 
 
 @webserver_bp.route("/logout")
@@ -128,18 +127,17 @@ def logout():
 
 @webserver_bp.route("/register", methods=["POST"])
 def web_register():
-
     webid = request.form.get("webid_or_provider")
 
-    redirect_url = current_app.config['REDIRECT_URL']
-    always_use_client_url = current_app.config['ALWAYS_USE_CLIENT_URL']
+    redirect_url = current_app.config["REDIRECT_URL"]
+    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
     try:
         data = generate_authentication_url(backend, webid, redirect_url, always_use_client_url)
-        provider = data['provider']
-        auth_url = data['auth_url']
-        log_messages = data['log_messages']
+        provider = data["provider"]
+        auth_url = data["auth_url"]
+        log_messages = data["log_messages"]
 
-        flask.session['provider'] = provider
+        flask.session["provider"] = provider
 
         return flask.render_template("register.html", log_messages=log_messages, auth_url=auth_url)
 
@@ -160,9 +158,7 @@ def web_redirect():
 
     redirect_uri = current_app.config["REDIRECT_URL"]
     always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
-    success, data = authentication_callback(
-        backend, auth_code, state, provider, redirect_uri, always_use_client_url
-    )
+    success, data = authentication_callback(backend, auth_code, state, provider, redirect_uri, always_use_client_url)
 
     if success:
         # TODO: If we want, we can make the original auth page include a redirect URL field, and redirect the user

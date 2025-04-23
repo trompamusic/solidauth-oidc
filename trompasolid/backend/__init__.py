@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 
 
 class SolidBackend(ABC):
-
     @abstractmethod
     def is_ready(self):
         pass

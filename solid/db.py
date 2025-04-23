@@ -7,7 +7,8 @@ from solid.extensions import bcrypt, db
 
 class User(db.Model, UserMixin):
     """A user of the app."""
-    __tablename__ = 'users'
+
+    __tablename__ = "users"
     id = db.Column(db.Integer, primary_key=True)
     user = db.Column(db.String(80), unique=True, nullable=False, index=True)
     #: The hashed password
@@ -36,6 +37,4 @@ class User(db.Model, UserMixin):
 
     def __repr__(self):
         """Represent instance as a unique string."""
-        return f'<User({self.user!r})>'
-
-
+        return f"<User({self.user!r})>"

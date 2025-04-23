@@ -11,66 +11,69 @@ class Base(DeclarativeBase):
 
 class RelyingPartyKey(Base):
     """Keys for the client, there should only be one of these"""
-    __tablename__ = 'relying_party'
+
+    __tablename__ = "relying_party"
     id: Mapped[int] = mapped_column(primary_key=True)
     data: Mapped[dict] = mapped_column(postgresql.JSONB)
 
     def __repr__(self):
-        return f'<RelyingPartyKey {self.id}>'
+        return f"<RelyingPartyKey {self.id}>"
 
 
 class ResourceServerConfiguration(Base):
-    __tablename__ = 'resource_server_configuration'
+    __tablename__ = "resource_server_configuration"
     id: Mapped[int] = mapped_column(primary_key=True)
     provider: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     data: Mapped[dict] = mapped_column(postgresql.JSONB)
 
     def __repr__(self):
-        return f'<ResourceServerConfiguration {self.id} ({self.provider})>'
+        return f"<ResourceServerConfiguration {self.id} ({self.provider})>"
 
 
 class ResourceServerKeys(Base):
-    __tablename__ = 'resource_server_keys'
+    __tablename__ = "resource_server_keys"
     id: Mapped[int] = mapped_column(primary_key=True)
     provider: Mapped[str] = mapped_column(Text, nullable=False, index=True, unique=True)
     data: Mapped[dict] = mapped_column(postgresql.JSONB)
 
     def __repr__(self):
-        return f'<ResourceServerKeys {self.id} ({self.provider})>'
+        return f"<ResourceServerKeys {self.id} ({self.provider})>"
 
 
 class ClientRegistration(Base):
-    __tablename__ = 'client_registration'
+    __tablename__ = "client_registration"
     id: Mapped[int] = mapped_column(primary_key=True)
     provider: Mapped[str] = mapped_column(Text, nullable=False, index=True, unique=True)
     data: Mapped[dict] = mapped_column(postgresql.JSONB)
 
     def __repr__(self):
-        return f'<ClientRegistration {self.id} ({self.provider})>'
+        return f"<ClientRegistration {self.id} ({self.provider})>"
 
 
 class ConfigurationToken(Base):
-    __tablename__ = 'configuration_token'
+    __tablename__ = "configuration_token"
     id: Mapped[int] = mapped_column(primary_key=True)
     issuer: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     sub: Mapped[str] = mapped_column(Text, nullable=False)
     profile: Mapped[str] = mapped_column(Text, nullable=False)
-    added: Mapped[datetime.datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    added: Mapped[datetime.datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
     data: Mapped[dict] = mapped_column(postgresql.JSONB)
     __table_args__ = (
-        Index('configuration_token_idx_issuer_sub', "issuer", "sub", unique=True),
-        Index('configuration_token_idx_issuer_profile', "issuer", "profile", unique=True)
+        Index("configuration_token_idx_issuer_sub", "issuer", "sub", unique=True),
+        Index("configuration_token_idx_issuer_profile", "issuer", "profile", unique=True),
     )
 
     def __repr__(self):
-        return f'<ConfigurationToken {self.id} ({self.issuer}, {self.sub})>'
+        return f"<ConfigurationToken {self.id} ({self.issuer}, {self.sub})>"
 
 
 class State(Base):
-    __tablename__ = 'pkce_state'
+    __tablename__ = "pkce_state"
     id: Mapped[int] = mapped_column(primary_key=True)
     state: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     code_verifier: Mapped[str] = mapped_column(Text, nullable=False, index=True)
 
     def __repr__(self):
-        return f'<State {self.id} ({self.state}, {self.code_verifier})>'
+        return f"<State {self.id} ({self.state}, {self.code_verifier})>"
