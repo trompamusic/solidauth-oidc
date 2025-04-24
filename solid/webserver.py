@@ -1,18 +1,17 @@
 from typing import Optional
 
 import flask
-from flask import request, current_app, jsonify, session
-from flask_login import login_user, login_required, logout_user
+from flask import current_app, jsonify, request, session
+from flask_login import login_required, login_user, logout_user
 
+import trompasolid.solid
+from solid import db, extensions
 from solid.admin import init_admin
-from trompasolid.authentication import generate_authentication_url, NoProviderError, authentication_callback
+from solid.auth import LoginForm, is_safe_url
+from trompasolid.authentication import NoProviderError, authentication_callback, generate_authentication_url
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
 from trompasolid.backend.redis_backend import RedisBackend
-import trompasolid.solid
-from solid import extensions
-from solid import db
-from solid.auth import is_safe_url, LoginForm
 
 backend: Optional[SolidBackend] = None
 
@@ -130,9 +129,10 @@ def web_register():
     webid = request.form.get("webid_or_provider")
 
     redirect_url = current_app.config["REDIRECT_URL"]
+    base_url = current_app.config["BASE_URL"]
     always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
     try:
-        data = generate_authentication_url(backend, webid, redirect_url, always_use_client_url)
+        data = generate_authentication_url(backend, webid, redirect_url, base_url, always_use_client_url)
         provider = data["provider"]
         auth_url = data["auth_url"]
         log_messages = data["log_messages"]
@@ -157,8 +157,11 @@ def web_redirect():
         provider = flask.session["provider"]
 
     redirect_uri = current_app.config["REDIRECT_URL"]
+    base_url = current_app.config["BASE_URL"]
     always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
-    success, data = authentication_callback(backend, auth_code, state, provider, redirect_uri, always_use_client_url)
+    success, data = authentication_callback(
+        backend, auth_code, state, provider, redirect_uri, base_url, always_use_client_url
+    )
 
     if success:
         # TODO: If we want, we can make the original auth page include a redirect URL field, and redirect the user
@@ -168,4 +171,5 @@ def web_redirect():
         return flask.render_template("success.html", redirect_after=redirect_after)
     else:
         print("Error when validating auth callback")
+        print(data)
         return "Error when validating auth callback", 500
