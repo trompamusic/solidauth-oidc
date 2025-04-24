@@ -20,17 +20,17 @@ def get_client_url_for_issuer(baseurl, issuer):
     return client_url
 
 
-def generate_authentication_url(backend, webid, redirect_url, always_use_client_url=False):
+def generate_authentication_url(backend, webid_or_provider, redirect_url, base_url, always_use_client_url=False):
     log_messages = []
 
-    if solid.is_webid(webid):
-        provider = solid.lookup_provider_from_profile(webid)
+    if solid.is_webid(webid_or_provider):
+        provider = solid.lookup_provider_from_profile(webid_or_provider)
     else:
-        provider = webid
+        provider = webid_or_provider
 
     if not provider:
-        log_messages.append(f"Cannot find a provider for webid {webid}")
-        raise NoProviderError(f"Cannot find a provider for webid {webid}")
+        log_messages.append(f"Cannot find a provider for webid {webid_or_provider}")
+        raise NoProviderError(f"Cannot find a provider for webid {webid_or_provider}")
 
     log_messages.append(f"Provider for this user is: {provider}")
     print(f"Provider for this user is: {provider}")
@@ -91,7 +91,7 @@ def generate_authentication_url(backend, webid, redirect_url, always_use_client_
     return {"provider": provider, "auth_url": auth_url, "log_messages": log_messages}
 
 
-def authentication_callback(backend, auth_code, state, provider, redirect_uri, always_use_client_url=False):
+def get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_url=False):
     provider_config = backend.get_resource_server_configuration(provider)
 
     do_dynamic_registration = solid.op_can_do_dynamic_registration(provider_config) and not always_use_client_url
@@ -101,11 +101,19 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, a
             raise Exception("Expected to find a registration for a backend but can't get one")
         client_id = client_registration["client_id"]
         client_secret = client_registration["client_secret"]
-        auth = (client_id, client_secret)
     else:
         issuer = provider_config["issuer"]
-        client_id = get_client_url_for_issuer(redirect_uri, issuer)
-        auth = None
+        client_id = get_client_url_for_issuer(base_url, issuer)
+        client_secret = None
+
+    return client_id, client_secret
+
+
+def authentication_callback(backend, auth_code, state, provider, redirect_uri, base_url, always_use_client_url=False):
+    provider_config = backend.get_resource_server_configuration(provider)
+
+    client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_url)
+    auth = (client_id, client_secret) if client_secret else None
 
     code_verifier = backend.get_state_data(state)
 
