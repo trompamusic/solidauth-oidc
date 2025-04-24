@@ -180,10 +180,8 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
             "code_verifier": code_verifier,
         },
         headers={"DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")},
-        # TODO: Community Solid Server seems to think that we're doing Basic Auth with the client id
-        #  and secret, even though with my understanding, PKCE means that it's unnecessary. Unsure of if
-        #  this is due to CSS or something during dynamic registration
-        #  NSS doesn't seem to have this problem
+        # This is `client_secret_basic` Client authentication method:https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication
+        # and is one of the options reported by the RS in token_endpoint_auth_methods_supported
         auth=auth,
         allow_redirects=False,
         timeout=10,
