@@ -166,6 +166,7 @@ def generate_authorization_request(configuration, redirect_url, client_id, state
             "client_id": client_id,
             # offline_access: also asks for refresh token
             "scope": "openid webid offline_access",
+            "prompt": "consent",
         }
     )
 
