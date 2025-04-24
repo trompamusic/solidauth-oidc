@@ -200,8 +200,8 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
         return False, data
 
 
-def refresh_auth_token(keypair, provider_info, client_id, refresh_token):
-    # Exchange auth code for access token
+def refresh_auth_token(keypair, provider_info, client_id, configuration_token):
+    refresh_token = configuration_token.data["refresh_token"]
     resp = requests.post(
         url=provider_info["token_endpoint"],
         data={

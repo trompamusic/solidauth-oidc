@@ -1,10 +1,9 @@
 import jwcrypto.jwk
 import jwcrypto.jwt
 
+from trompasolid import solid
 from trompasolid.backend import SolidBackend
 from trompasolid.dpop import make_token_for
-from trompasolid import solid
-
 
 backend: SolidBackend = None
 
@@ -31,7 +30,7 @@ def get_bearer_for_user(provider, profile, url, method):
         refresh_token = configuration_token.data["refresh_token"]
         keypair = solid.load_key(backend.get_relying_party_keys())
         provider_info = backend.get_resource_server_configuration(provider)
-        status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], refresh_token)
+        status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration, refresh_token)
         if status:
             resp.update({"refresh_token": refresh_token})
             access_token = resp["access_token"]

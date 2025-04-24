@@ -76,7 +76,7 @@ def generate_authentication_url(backend, webid_or_provider, redirect_url, base_u
         # TODO: For now, generate a random URL based on the issuer + a basic hash.
         #  For testing this might need to be semi-random in case the provider caches it
         issuer = provider_config["issuer"]
-        client_id = get_client_url_for_issuer(redirect_url, issuer)
+        client_id = get_client_url_for_issuer(base_url, issuer)
         log_messages.append(f"client_id {client_id}")
 
     code_verifier, code_challenge = solid.make_verifier_challenge()
