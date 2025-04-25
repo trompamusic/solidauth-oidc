@@ -30,9 +30,10 @@ def get_bearer_for_user(provider, profile, url, method):
         refresh_token = configuration_token.data["refresh_token"]
         keypair = solid.load_key(backend.get_relying_party_keys())
         provider_info = backend.get_resource_server_configuration(provider)
-        status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration, refresh_token)
+        status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration, configuration_token)
         if status:
-            resp.update({"refresh_token": refresh_token})
+            if "refresh_token" not in resp:
+                resp.update({"refresh_token": refresh_token})
             access_token = resp["access_token"]
             backend.update_configuration_token(provider, profile, resp)
             print("... refreshed")
