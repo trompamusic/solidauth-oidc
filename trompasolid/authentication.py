@@ -3,6 +3,7 @@ import zlib
 
 import jwcrypto.jwk
 import jwcrypto.jwt
+import jwt
 
 from trompasolid import solid
 from trompasolid.dpop import make_random_string
@@ -18,6 +19,52 @@ def get_client_url_for_issuer(baseurl, issuer):
     issuer_hash = zlib.adler32(issuer.encode())
     client_url = baseurl + f"client/{issuer_hash}.jsonld"
     return client_url
+
+
+def select_jwk_by_kid(jwks, kid):
+    """
+    Select the correct JWK from a JWKS based on the key ID (kid).
+
+    Args:
+        jwks: JSON Web Key Set containing multiple keys
+        kid: Key ID to match
+
+    Returns:
+        JWK object for the matching key
+
+    Raises:
+        ValueError: If no key with the specified kid is found
+    """
+    if "keys" not in jwks:
+        raise ValueError("Invalid JWKS format: missing 'keys' field")
+
+    for key_data in jwks["keys"]:
+        if key_data.get("kid") == kid:
+            return jwcrypto.jwk.JWK.from_json(json.dumps(key_data))
+
+    # If no kid is specified in the JWT header, try the first key (fallback)
+    if kid is None and jwks["keys"]:
+        return jwcrypto.jwk.JWK.from_json(json.dumps(jwks["keys"][0]))
+
+    raise ValueError(f"No key found with kid: {kid}")
+
+
+def get_jwt_kid(token):
+    """
+    Extract the key ID (kid) from a JWT header without validating the signature.
+
+    Args:
+        token: JWT token string
+
+    Returns:
+        Key ID from the JWT header, or None if not present
+    """
+    try:
+        header = jwt.get_unverified_header(token)
+        return header.get("kid")
+    except jwt.DecodeError as e:
+        print(f"Error extracting kid from JWT: {e}")
+        return None
 
 
 def generate_authentication_url(backend, webid_or_provider, redirect_url, base_url, always_use_client_url=False):
@@ -126,29 +173,50 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, b
 
     if success:
         id_token = resp["id_token"]
-        server_key = backend.get_resource_server_keys(provider)
-        # TODO: It seems like a server may give more than one key, is this the correct one?
-        # TODO: We need to load the jwt, and from its header find the "kid" (key id) parameter
-        #  from this, we can load through the list of server_key keys and find the key with this keyid
-        #  and then use that key to validate the message
-        key = server_key["keys"][0]
-        key = jwcrypto.jwk.JWK.from_json(json.dumps(key))
-        decoded_id_token = jwcrypto.jwt.JWT()
-        decoded_id_token.deserialize(id_token, key=key)
+        server_jwks = backend.get_resource_server_keys(provider)
 
-        claims = json.loads(decoded_id_token.claims)
+        # Extract the key ID from the JWT header
+        kid = get_jwt_kid(id_token)
 
-        if "webid" in claims:
-            # The user's web id should be in the 'webid' key, but this doesn't always exist
-            # (used to be 'sub'). Node Solid Server still uses sub, but other services put a
-            # different value in this field
-            webid = claims["webid"]
-        else:
-            webid = claims["sub"]
-        issuer = claims["iss"]
-        sub = claims["sub"]
-        backend.save_configuration_token(issuer, webid, sub, resp)
-        return True, resp
+        try:
+            # Select the correct key based on the kid
+            key = select_jwk_by_kid(server_jwks, kid)
+
+            # Validate and decode the ID token
+            decoded_id_token = jwcrypto.jwt.JWT()
+            decoded_id_token.deserialize(id_token, key=key)
+
+            claims = json.loads(decoded_id_token.claims)
+
+            if "webid" in claims:
+                # The user's web id should be in the 'webid' key, but this doesn't always exist
+                # (used to be 'sub'). Node Solid Server still uses sub, but other services put a
+                # different value in this field
+                webid = claims["webid"]
+            else:
+                webid = claims["sub"]
+            issuer = claims["iss"]
+            sub = claims["sub"]
+            backend.save_configuration_token(issuer, webid, sub, resp)
+            return True, resp
+
+        except ValueError as e:
+            print(f"Error selecting JWK: {e}")
+            return False, {"error": "invalid_token", "error_description": str(e)}
+        except (
+            jwcrypto.jwt.JWTExpiredError,
+            jwcrypto.jwt.JWTInvalidSignatureError,
+            jwcrypto.jwt.JWTInvalidClaimError,
+            ValueError,
+            TypeError,
+        ) as e:
+            # JWTExpiredError: Token has expired
+            # JWTInvalidSignatureError: Invalid signature
+            # JWTInvalidClaimError: Invalid claims
+            # ValueError: Invalid JWT format
+            # TypeError: Invalid key type
+            print(f"Error validating ID token: {e}")
+            return False, {"error": "invalid_token", "error_description": str(e)}
     else:
         print("Error when validating auth callback")
         return False, resp
