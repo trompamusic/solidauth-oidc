@@ -1,4 +1,5 @@
 import json
+import urllib.parse
 
 import click
 import jwcrypto.jwk
@@ -7,6 +8,10 @@ from flask import Blueprint, current_app
 
 from solid import extensions
 from trompasolid import solid
+from trompasolid.authentication import (
+    generate_authentication_url,
+    get_client_id_and_secret_for_provider,
+)
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
 from trompasolid.backend.redis_backend import RedisBackend
@@ -60,9 +65,11 @@ def lookup_op_configuration(profileurl):
     # Get the canonical provider url from the openid configuration (e.g. https://solidcommunity.net vs https://solidcommunity.net/)
     provider = openid_conf.get("issuer", provider)
     get_backend().save_resource_server_configuration(provider, openid_conf)
+    print(f"Saved configuration for {provider}")
 
     provider_keys = solid.load_op_jwks(openid_conf)
     get_backend().save_resource_server_keys(provider, provider_keys)
+    print(f"Saved keys for {provider}")
 
 
 @cli_bp.cli.command()
@@ -91,6 +98,18 @@ def get_provider_configuration(provider):
 def register(provider):
     """Step 3, Register with the OP.
     Pass in the provider url from `lookup-op`"""
+
+    backend = get_backend()
+    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
+    if always_use_client_url:
+        print("Won't do dynamic registration (config.ALWAYS_USE_CLIENT_URL is True)")
+        print("when ALWAYS_USE_CLIENT_URL is True, the `client_id` parameter must be a public URL, and ")
+        print("   this CLI doesn't include a webserver, so cannot continue")
+        return
+
+    redirect_url = current_app.config["REDIRECT_URL"]
+    base_url = current_app.config["BASE_URL"]
+    generate_authentication_url(backend, provider, redirect_url, base_url, always_use_client_url)
 
     provider_config = get_backend().get_resource_server_configuration(provider)
 
@@ -165,32 +184,36 @@ def exchange_auth(provider, code, state):
     """Step 5, Exchange a code for a long-term token.
 
     Provide a provider url, and the code and state that were returned in the redirect by the provider
+
+    This is the same code as `authentication_callback`, but copied here so that we can
+    add additional debugging output when testing.
     """
 
-    client_registration = get_backend().get_client_registration(provider)
-    if not client_registration:
-        raise Exception("Expected to find a registration for a backend but can't get one")
-    provider_config = get_backend().get_resource_server_configuration(provider)
-
+    backend = get_backend()
     redirect_uri = current_app.config["REDIRECT_URL"]
+    base_url = current_app.config["BASE_URL"]
+    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
 
-    signing_algorithm = solid.get_signing_algorithm(provider_config)
-    code_verifier = get_backend().get_state_data(state)
-    keypair = solid.load_key(get_backend().get_relying_party_keys(signing_algorithm))
+    client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_url)
+    auth = (client_id, client_secret) if client_secret else None
+    provider_config = backend.get_resource_server_configuration(provider)
+
+    code_verifier = backend.get_state_data(state)
+
+    keypair = solid.load_key(backend.get_relying_party_keys())
     assert code_verifier is not None, f"state {state} not in backend?"
 
-    client_id = client_registration["client_id"]
-    client_secret = client_registration["client_secret"]
-    auth = (client_id, client_secret)
     success, resp = solid.validate_auth_callback(
-        signing_algorithm, keypair, code_verifier, code, provider_config, client_id, redirect_uri, auth=auth
+        keypair, code_verifier, code, provider_config, client_id, redirect_uri, auth
     )
 
     if success:
-        print(resp)
         id_token = resp["id_token"]
-        server_key = get_backend().get_resource_server_keys(provider)
+        server_key = backend.get_resource_server_keys(provider)
         # TODO: It seems like a server may give more than one key, is this the correct one?
+        # TODO: We need to load the jwt, and from its header find the "kid" (key id) parameter
+        #  from this, we can load through the list of server_key keys and find the key with this keyid
+        #  and then use that key to validate the message
         key = server_key["keys"][0]
         key = jwcrypto.jwk.JWK.from_json(json.dumps(key))
         decoded_id_token = jwcrypto.jwt.JWT()
@@ -198,38 +221,62 @@ def exchange_auth(provider, code, state):
 
         claims = json.loads(decoded_id_token.claims)
 
+        if "webid" in claims:
+            # The user's web id should be in the 'webid' key, but this doesn't always exist
+            # (used to be 'sub'). Node Solid Server still uses sub, but other services put a
+            # different value in this field
+            webid = claims["webid"]
+        else:
+            webid = claims["sub"]
         issuer = claims["iss"]
         sub = claims["sub"]
-        print(claims)
-
-        get_backend().save_configuration_token(issuer, profile=sub, sub=sub, token=resp)
-        print(f"Saved {issuer=}, {sub=}")
+        backend.save_configuration_token(issuer, webid, sub, resp)
+        return True, resp
     else:
-        print("No response - error when exchanging key")
+        print("Error when validating auth callback")
+        return False, resp
+
+
+@cli_bp.cli.command()
+@click.argument("url")
+def exchange_auth_url(url):
+    """
+    Step 5b, Exchange an auth url for a token, from a redirect url
+    """
+    parts = urllib.parse.urlparse(url)
+    query = urllib.parse.parse_qs(parts.query)
+    if "iss" not in query or "code" not in query or "state" not in query:
+        print("Missing iss, code, or state in query string")
+        return
+    provider = query["iss"][0]
+    code = query["code"][0]
+    state = query["state"][0]
+    exchange_auth(provider, code, state)
 
 
 @cli_bp.cli.command()
 @click.argument("profile")
 def refresh(profile):
     provider = solid.lookup_provider_from_profile(profile)
-    print(f"{profile=}")
-    print(f"{provider=}")
-    keypair = solid.load_key(get_backend().get_relying_party_keys())
-    provider_info = get_backend().get_resource_server_configuration(provider)
+    backend = get_backend()
 
-    configuration_token = get_backend().get_configuration_token(provider, profile)
+    keypair = solid.load_key(backend.get_relying_party_keys())
+    provider_info = backend.get_resource_server_configuration(provider)
+
+    configuration_token = backend.get_configuration_token(provider, profile)
     if not configuration_token.has_expired():
         print("Configuration token has not expired, skipping refresh")
         return
+    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
+    base_url = current_app.config["BASE_URL"]
+    client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_url)
 
-    client_registration = get_backend().get_client_registration(provider)
+    status, resp = solid.refresh_auth_token(keypair, provider_info, client_id, configuration_token)
+    print(f"{status=}")
+    print(resp)
 
-    refresh_token = configuration_token.data["refresh_token"]
-    status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration["client_id"], refresh_token)
-
-    if status and False:
-        resp.update({"refresh_token": refresh_token})
-        get_backend().update_configuration_token(provider, profile, resp)
+    if status:
+        backend.update_configuration_token(provider, profile, resp)
         print("Token updated")
     else:
         print(f"Failure updating token: {status}")
