@@ -5,7 +5,7 @@ from flask import current_app, jsonify, request, session
 from flask_login import login_required, login_user, logout_user
 
 import trompasolid.solid
-from solid import db, extensions
+from solid import constants, db, extensions
 from solid.admin import init_admin
 from solid.auth import LoginForm, is_safe_url
 from trompasolid.authentication import NoProviderError, authentication_callback, generate_authentication_url
@@ -132,7 +132,9 @@ def web_register():
     base_url = current_app.config["BASE_URL"]
     always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
     try:
-        data = generate_authentication_url(backend, webid, redirect_url, base_url, always_use_client_url)
+        data = generate_authentication_url(
+            backend, webid, constants.client_name, redirect_url, base_url, always_use_client_url
+        )
         provider = data["provider"]
         auth_url = data["auth_url"]
         log_messages = data["log_messages"]

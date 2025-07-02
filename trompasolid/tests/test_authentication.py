@@ -2,11 +2,19 @@
 Tests for authentication functionality in the trompasolid package.
 """
 
+import time
+
 import jwcrypto.jwk
 import jwcrypto.jwt
 import pytest
 
-from trompasolid.authentication import get_jwt_kid, select_jwk_by_kid
+from trompasolid import solid
+from trompasolid.authentication import (
+    IDTokenValidationError,
+    get_jwt_kid,
+    select_jwk_by_kid,
+    validate_id_token_claims,
+)
 
 
 class TestJWTKeySelection:
@@ -110,6 +118,137 @@ class TestJWTKidExtraction:
         assert kid is None
 
 
+class TestIDTokenValidation:
+    """Test cases for ID token validation functionality."""
+
+    @pytest.fixture
+    def valid_claims(self):
+        """Valid ID token claims for testing."""
+        current_time = int(time.time())
+        return {
+            "iss": "https://example.com",
+            "aud": "test_client_id",
+            "exp": current_time + 3600,  # 1 hour from now
+            "iat": current_time,
+            "sub": "test_user",
+            "webid": "https://example.com/profile#me",
+        }
+
+    def test_validate_id_token_claims_success(self, valid_claims):
+        """Test successful validation of valid claims."""
+        # Should not raise any exception
+        validate_id_token_claims(valid_claims, "https://example.com", "test_client_id")
+
+    def test_validate_id_token_claims_invalid_issuer(self, valid_claims):
+        """Test validation fails with invalid issuer."""
+        with pytest.raises(IDTokenValidationError, match="Invalid issuer"):
+            validate_id_token_claims(valid_claims, "https://different.com", "test_client_id")
+
+    def test_validate_id_token_claims_missing_aud(self, valid_claims):
+        """Test validation fails with missing audience."""
+        claims = valid_claims.copy()
+        del claims["aud"]
+        with pytest.raises(IDTokenValidationError, match="Missing 'aud' claim"):
+            validate_id_token_claims(claims, "https://example.com", "test_client_id")
+
+    def test_validate_id_token_claims_invalid_aud_string(self, valid_claims):
+        """Test validation fails with invalid audience string."""
+        claims = valid_claims.copy()
+        claims["aud"] = "wrong_client_id"
+        with pytest.raises(IDTokenValidationError, match="Invalid audience"):
+            validate_id_token_claims(claims, "https://example.com", "test_client_id")
+
+    def test_validate_id_token_claims_aud_list_success(self, valid_claims):
+        """Test validation succeeds with audience as list."""
+        claims = valid_claims.copy()
+        claims["aud"] = ["test_client_id", "other_client_id"]
+        # Should not raise any exception
+        validate_id_token_claims(claims, "https://example.com", "test_client_id")
+
+    def test_validate_id_token_claims_aud_list_failure(self, valid_claims):
+        """Test validation fails when client_id not in audience list."""
+        claims = valid_claims.copy()
+        claims["aud"] = ["other_client_id", "another_client_id"]
+        with pytest.raises(IDTokenValidationError, match="Client ID test_client_id not in audience list"):
+            validate_id_token_claims(claims, "https://example.com", "test_client_id")
+
+    def test_validate_id_token_claims_missing_exp(self, valid_claims):
+        """Test validation fails with missing expiration."""
+        claims = valid_claims.copy()
+        del claims["exp"]
+        with pytest.raises(IDTokenValidationError, match="Missing 'exp' claim"):
+            validate_id_token_claims(claims, "https://example.com", "test_client_id")
+
+    def test_validate_id_token_claims_expired_token(self, valid_claims):
+        """Test validation fails with expired token."""
+        claims = valid_claims.copy()
+        claims["exp"] = int(time.time()) - 3600  # 1 hour ago
+        with pytest.raises(IDTokenValidationError, match="Token has expired"):
+            validate_id_token_claims(claims, "https://example.com", "test_client_id")
+
+    def test_validate_id_token_claims_missing_iat(self, valid_claims):
+        """Test validation fails with missing issued at time."""
+        claims = valid_claims.copy()
+        del claims["iat"]
+        with pytest.raises(IDTokenValidationError, match="Missing 'iat' claim"):
+            validate_id_token_claims(claims, "https://example.com", "test_client_id")
+
+    def test_validate_id_token_claims_future_iat(self, valid_claims):
+        """Test validation fails with future issued at time."""
+        claims = valid_claims.copy()
+        claims["iat"] = int(time.time()) + 600  # 10 minutes in future
+        with pytest.raises(IDTokenValidationError, match="Token issued in the future"):
+            validate_id_token_claims(claims, "https://example.com", "test_client_id")
+
+    def test_validate_id_token_claims_with_nonce_success(self, valid_claims):
+        """Test validation succeeds with valid nonce."""
+        claims = valid_claims.copy()
+        claims["nonce"] = "test_nonce"
+        # Should not raise any exception
+        validate_id_token_claims(claims, "https://example.com", "test_client_id", nonce="test_nonce")
+
+    def test_validate_id_token_claims_with_nonce_failure(self, valid_claims):
+        """Test validation fails with invalid nonce."""
+        claims = valid_claims.copy()
+        claims["nonce"] = "wrong_nonce"
+        with pytest.raises(IDTokenValidationError, match="Invalid nonce"):
+            validate_id_token_claims(claims, "https://example.com", "test_client_id", nonce="test_nonce")
+
+    def test_validate_id_token_claims_missing_nonce(self, valid_claims):
+        """Test validation fails when nonce expected but missing."""
+        with pytest.raises(IDTokenValidationError, match="nonce expected but missing"):
+            validate_id_token_claims(valid_claims, "https://example.com", "test_client_id", nonce="test_nonce")
+
+    def test_validate_id_token_claims_with_max_age_success(self, valid_claims):
+        """Test validation succeeds with valid max_age."""
+        claims = valid_claims.copy()
+        claims["auth_time"] = int(time.time()) - 300  # 5 minutes ago
+        # Should not raise any exception
+        validate_id_token_claims(
+            claims,
+            "https://example.com",
+            "test_client_id",
+            max_age=600,  # 10 minutes
+        )
+
+    def test_validate_id_token_claims_with_max_age_failure(self, valid_claims):
+        """Test validation fails when token too old for max_age."""
+        claims = valid_claims.copy()
+        claims["auth_time"] = int(time.time()) - 1200  # 20 minutes ago
+        with pytest.raises(IDTokenValidationError, match="Token too old"):
+            validate_id_token_claims(
+                claims,
+                "https://example.com",
+                "test_client_id",
+                max_age=600,  # 10 minutes
+            )
+
+    def test_validate_id_token_claims_missing_auth_time(self, valid_claims):
+        """Test validation fails when max_age specified but auth_time missing."""
+        with pytest.raises(IDTokenValidationError, match="max_age specified but 'auth_time' claim missing"):
+            validate_id_token_claims(valid_claims, "https://example.com", "test_client_id", max_age=600)
+
+
 class TestJWTKeySelectionIntegration:
     """Integration tests combining kid extraction and key selection."""
 
@@ -161,3 +300,44 @@ class TestJWTKeySelectionIntegration:
         assert kid is None
         assert key is not None
         assert isinstance(key, jwcrypto.jwk.JWK)
+
+
+class TestClientIDDocumentRegistration:
+    """Test cases for client ID document registration checking."""
+
+    def test_op_supports_client_id_document_registration_with_no_auth_methods(self):
+        """Test that OP supports client ID document registration when no auth methods specified."""
+        op_config = {
+            "registration_endpoint": "https://example.com/register",
+            "registration_endpoint_auth_methods_supported": [],
+        }
+        assert solid.op_supports_client_id_document_registration(op_config) is True
+
+    def test_op_supports_client_id_document_registration_with_none_auth_method(self):
+        """Test that OP supports client ID document registration when 'none' auth method is supported."""
+        op_config = {
+            "registration_endpoint": "https://example.com/register",
+            "registration_endpoint_auth_methods_supported": ["none", "client_secret_basic"],
+        }
+        assert solid.op_supports_client_id_document_registration(op_config) is True
+
+    def test_op_does_not_support_client_id_document_registration_with_auth_methods(self):
+        """Test that OP does not support client ID document registration when auth methods are required."""
+        op_config = {
+            "registration_endpoint": "https://example.com/register",
+            "registration_endpoint_auth_methods_supported": ["client_secret_basic", "private_key_jwt"],
+        }
+        assert solid.op_supports_client_id_document_registration(op_config) is False
+
+    def test_op_does_not_support_client_id_document_registration_no_endpoint(self):
+        """Test that OP does not support client ID document registration when no registration endpoint."""
+        op_config = {
+            "authorization_endpoint": "https://example.com/authorize",
+            "token_endpoint": "https://example.com/token",
+        }
+        assert solid.op_supports_client_id_document_registration(op_config) is False
+
+    def test_op_does_not_support_client_id_document_registration_missing_auth_methods_field(self):
+        """Test that OP supports client ID document registration when auth methods field is missing."""
+        op_config = {"registration_endpoint": "https://example.com/register"}
+        assert solid.op_supports_client_id_document_registration(op_config) is True

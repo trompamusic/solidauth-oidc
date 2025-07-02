@@ -6,13 +6,16 @@ import jwcrypto.jwk
 import jwcrypto.jwt
 from flask import Blueprint, current_app
 
-from solid import extensions
+from solid import constants, extensions
 from trompasolid import solid
 from trompasolid.authentication import (
-    generate_authentication_url,
+    ClientDoesNotSupportDynamicRegistration,
+    IDTokenValidationError,
     get_client_id_and_secret_for_provider,
+    get_client_url_for_issuer,
     get_jwt_kid,
     select_jwk_by_kid,
+    validate_id_token_claims,
 )
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
@@ -42,10 +45,10 @@ def create_key():
     get_backend().save_relying_party_keys(keys)
 
 
-@cli_bp.cli.command("lookup-op")
+@cli_bp.cli.command("get-provider-configuration-from-profile")
 @click.argument("profileurl")
-def lookup_op_configuration(profileurl):
-    """Step 2, Look-up a user's vcard and find their OP (OpenID Provider).
+def get_provider_configuration_from_profile(profileurl):
+    """Step 2a, Look-up a user's vcard and find their OP (OpenID Provider).
     Once you have it, look up the provider's OpenID configuration and save it. If it's previously been saved,
     just load it
     """
@@ -74,10 +77,10 @@ def lookup_op_configuration(profileurl):
     print(f"Saved keys for {provider}")
 
 
-@cli_bp.cli.command()
+@cli_bp.cli.command("get-provider-configuration")
 @click.argument("provider")
 def get_provider_configuration(provider):
-    """Step 2b if not using step 2, just get the provider configuration without knowing the user's profile"""
+    """Step 2b, if not using step 2a, just get the provider configuration without knowing the user's profile"""
 
     provider_configuration = get_backend().get_resource_server_configuration(provider)
     provider_keys = get_backend().get_resource_server_keys(provider)
@@ -90,28 +93,22 @@ def get_provider_configuration(provider):
     # Get the canonical provider url from the openid configuration (e.g. https://solidcommunity.net vs https://solidcommunity.net/)
     provider = openid_conf.get("issuer", provider)
     get_backend().save_resource_server_configuration(provider, openid_conf)
+    print(f"Saved configuration for {provider}")
 
     provider_keys = solid.load_op_jwks(openid_conf)
     get_backend().save_resource_server_keys(provider, provider_keys)
+    print(f"Saved keys for {provider}")
 
 
 @cli_bp.cli.command()
 @click.argument("provider")
 def register(provider):
     """Step 3, Register with the OP.
-    Pass in the provider url from `lookup-op`"""
+    Pass in the provider url from `get-provider-configuration` or `get-provider-configuration-from-profile`
 
-    backend = get_backend()
-    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
-    if always_use_client_url:
-        print("Won't do dynamic registration (config.ALWAYS_USE_CLIENT_URL is True)")
-        print("when ALWAYS_USE_CLIENT_URL is True, the `client_id` parameter must be a public URL, and ")
-        print("   this CLI doesn't include a webserver, so cannot continue")
-        return
-
-    redirect_url = current_app.config["REDIRECT_URL"]
-    base_url = current_app.config["BASE_URL"]
-    generate_authentication_url(backend, provider, redirect_url, base_url, always_use_client_url)
+    This method is similar to `trompasolid.authentication.generate_authentication_url`, but copied here so that we can
+    add additional debugging output when testing.
+    """
 
     provider_config = get_backend().get_resource_server_configuration(provider)
 
@@ -121,34 +118,42 @@ def register(provider):
 
     existing_registration = get_backend().get_client_registration(provider)
     if existing_registration:
-        print(f"Registration for {provider} already exists, quitting")
+        print(f"Registration for {provider} already exists, skipping {existing_registration['client_id']}")
         return
 
-    do_dynamic_registration = (
-        solid.op_can_do_dynamic_registration(provider_config) and not current_app.config["ALWAYS_USE_CLIENT_URL"]
-    )
-    print("Can do dynamic:", solid.op_can_do_dynamic_registration(provider_config))
+    if not solid.op_can_do_dynamic_registration(provider_config):
+        # Provider doesn't support dynamic registration - while solid allows us to use a
+        # manually created client ("static registration"), we don't want to deal with this
+        raise ClientDoesNotSupportDynamicRegistration(
+            f"Provider {provider} does not support dynamic client registration. "
+            f"Registration endpoint: {provider_config.get('registration_endpoint', 'not available')}"
+        )
 
-    if do_dynamic_registration:
+    if current_app.config["ALWAYS_USE_CLIENT_URL"]:
+        # Generate a client URL that points to our client metadata document
+        # Section 5 of the Solid-OIDC spec (https://solidproject.org/TR/oidc#clientids) says
+        # OAuth and OIDC require the Client application to identify itself to the OP and RS by presenting a client identifier (Client ID). Solid applications SHOULD use a URI that can be dereferenced as a Client ID Document.
+        # this means that "token_endpoint_auth_methods_supported" should include "none", otherwise this is not supported
+        # https://github.com/solid/solid-oidc/issues/78
+        # If we want to use this, then there is no "registration" step, we just use the URL as the client_id
+        # at the auth request step.
+        issuer = provider_config["issuer"]
+        base_url = current_app.config["BASE_URL"]
+        client_id = get_client_url_for_issuer(base_url, issuer)
+        print("App config requests what we use a client ID document, not dynamic registration")
+        print(f"   (config.ALWAYS_USE_CLIENT_URL is {current_app.config['ALWAYS_USE_CLIENT_URL']})")
+        print("as a result, registration doesn't exist. Move directly to auth request")
+        return
+    else:
         print("Requested to do dynamic client registration")
-        client_registration = get_backend().get_client_registration(provider)
-        if client_registration:
-            print(f"Registration for {provider} already exists, skipping")
-        else:
-            client_registration = solid.dynamic_registration(
-                provider, current_app.config["REDIRECT_URL"], provider_config
-            )
-            get_backend().save_client_registration(provider, client_registration)
+        client_registration = solid.dynamic_registration(
+            provider, constants.client_name, current_app.config["REDIRECT_URL"], provider_config
+        )
+        get_backend().save_client_registration(provider, client_registration)
 
-            print("Registered client with provider")
+        print("Registered client with provider")
         client_id = client_registration["client_id"]
         print(f"Client ID is {client_id}")
-    else:
-        print(
-            "Cannot do dynamic registration (either the provider doesn't support it or config.ALWAYS_USE_CLIENT_URL is True"
-        )
-        print("Requests to this provider require that the `client_id` parameter is a public URL, and this CLI doesn't")
-        print("   include a webserver, so cannot continue")
 
 
 @cli_bp.cli.command()
@@ -159,13 +164,28 @@ def auth_request(profileurl):
     Provide a user's profile url
     """
     provider = solid.lookup_provider_from_profile(profileurl)
-    provider_configuration = get_backend().get_resource_server_configuration(provider)
-    client_registration = get_backend().get_client_registration(provider)
-    if client_registration is None:
-        print("No client registration, use `register` first")
-        return
 
-    client_id = client_registration["client_id"]
+    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
+    base_url = current_app.config["BASE_URL"]
+
+    provider_configuration = get_backend().get_resource_server_configuration(provider)
+
+    if always_use_client_url:
+        print("Using client_id as URL for auth request")
+        issuer = provider_configuration["issuer"]
+        base_url = current_app.config["BASE_URL"]
+        client_id = get_client_url_for_issuer(base_url, issuer)
+    else:
+        print("Using client from dynamic registration for auth request")
+        client_registration = get_backend().get_client_registration(provider)
+        if client_registration is None:
+            print("No client registration, use `register` first")
+            return
+
+        client_id = client_registration["client_id"]
+
+    print(f"Client ID is {client_id}")
+
     code_verifier, code_challenge = solid.make_verifier_challenge()
     state = make_random_string()
 
@@ -226,6 +246,13 @@ def exchange_auth(provider, code, state):
 
             claims = json.loads(decoded_id_token.claims)
 
+            # Validate ID token claims according to OpenID Connect Core 1.0
+            try:
+                validate_id_token_claims(claims, provider, client_id)
+            except IDTokenValidationError as e:
+                print(f"ID token validation failed: {e}")
+                return False, {"error": "invalid_token", "error_description": str(e)}
+
             if "webid" in claims:
                 # The user's web id should be in the 'webid' key, but this doesn't always exist
                 # (used to be 'sub'). Node Solid Server still uses sub, but other services put a
@@ -263,7 +290,8 @@ def exchange_auth(provider, code, state):
 
 @cli_bp.cli.command()
 @click.argument("url")
-def exchange_auth_url(url):
+@click.pass_context
+def exchange_auth_url(ctx, url):
     """
     Step 5b, Exchange an auth url for a token, from a redirect url
     """
@@ -275,7 +303,10 @@ def exchange_auth_url(url):
     provider = query["iss"][0]
     code = query["code"][0]
     state = query["state"][0]
-    exchange_auth(provider, code, state)
+    print(f"Provider: {provider}")
+    print(f"Code: {code}")
+    print(f"State: {state}")
+    ctx.invoke(exchange_auth, provider=provider, code=code, state=state)
 
 
 @cli_bp.cli.command()
