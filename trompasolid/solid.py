@@ -49,31 +49,11 @@ def lookup_provider_from_profile(profile_url: str):
 
 def is_webid(url: str):
     """See if a URL is of a web id or a provider"""
-
-    # TODO: Duplicates `lookup_provider_from_profile`
-    # TODO: If we do this once, we can take advantage of it and also get the values
-    r = requests.options(url, timeout=10)
-    r.raise_for_status()
-    links = r.headers.get("Link")
-    if links:
-        parsed_links = requests.utils.parse_header_links(links)
-        for l in parsed_links:
-            if l.get("rel") == "http://openid.net/specs/connect/1.0/issuer":
-                return True
-
-    # If we get here, there was no rel in the options. Instead, try and get the card
-    # and find its issuer
-    graph = rdflib.Graph()
     try:
-        graph.parse(url)
-        issuer = rdflib.URIRef("http://www.w3.org/ns/solid/terms#oidcIssuer")
-        triples = list(graph.triples([None, issuer, None]))
-        if triples:
-            return True
+        provider = lookup_provider_from_profile(url)
+        return provider is not None
     except HTTPError:
-        pass
-
-    return False
+        return False
 
 
 def get_openid_configuration(op_url):
