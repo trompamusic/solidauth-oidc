@@ -3,6 +3,7 @@ Tests for authentication functionality in the trompasolid package.
 """
 
 import time
+from unittest.mock import Mock, patch
 
 import jwcrypto.jwk
 import jwcrypto.jwt
@@ -11,6 +12,7 @@ import pytest
 from trompasolid import solid
 from trompasolid.authentication import (
     IDTokenValidationError,
+    authentication_callback,
     get_jwt_kid,
     select_jwk_by_kid,
     validate_id_token_claims,
@@ -341,3 +343,61 @@ class TestClientIDDocumentRegistration:
         """Test that OP supports client ID document registration when auth methods field is missing."""
         op_config = {"registration_endpoint": "https://example.com/register"}
         assert solid.op_supports_client_id_document_registration(op_config) is True
+
+
+class TestStateParameterSecurity:
+    """Test that state parameter is deleted after use in authentication_callback."""
+
+    @patch("trompasolid.authentication.get_jwt_kid", return_value="kid1")
+    @patch("trompasolid.authentication.select_jwk_by_kid")
+    @patch("trompasolid.authentication.jwcrypto.jwt.JWT")
+    @patch("trompasolid.authentication.validate_id_token_claims")
+    @patch("trompasolid.authentication.solid")
+    def test_state_deleted_after_callback_success(
+        self, mock_solid, mock_validate, mock_jwt, mock_select_jwk, mock_get_kid
+    ):
+        backend = Mock()
+        backend.get_resource_server_configuration.return_value = {"issuer": "https://issuer.example"}
+        backend.get_state_data.return_value = "verifier"
+        backend.get_resource_server_keys.return_value = {"keys": [{"kid": "kid1"}]}
+        backend.get_relying_party_keys.return_value = "{}"
+        backend.get_client_registration.return_value = {"client_id": "cid", "client_secret": "secret"}
+        backend.get_state_data.return_value = "verifier"
+        backend.get_client_id_and_secret_for_provider = Mock(return_value=("cid", "secret"))
+        backend.save_configuration_token = Mock()
+        backend.delete_state_data = Mock()
+
+        # Simulate successful validate_auth_callback
+        mock_solid.validate_auth_callback.return_value = (True, {"id_token": "token"})
+        mock_jwt.return_value.claims = '{"iss": "https://issuer.example", "sub": "sub", "webid": "webid"}'
+
+        authentication_callback(backend, "auth_code", "state123", "https://issuer.example", "redirect", "base", False)
+
+        backend.delete_state_data.assert_called_once_with("state123")
+
+    @patch("trompasolid.authentication.get_jwt_kid", return_value="kid1")
+    @patch("trompasolid.authentication.select_jwk_by_kid")
+    @patch("trompasolid.authentication.jwcrypto.jwt.JWT")
+    @patch("trompasolid.authentication.validate_id_token_claims", side_effect=IDTokenValidationError("fail"))
+    @patch("trompasolid.authentication.solid")
+    def test_state_deleted_after_callback_failure(
+        self, mock_solid, mock_validate, mock_jwt, mock_select_jwk, mock_get_kid
+    ):
+        backend = Mock()
+        backend.get_resource_server_configuration.return_value = {"issuer": "https://issuer.example"}
+        backend.get_state_data.return_value = "verifier"
+        backend.get_resource_server_keys.return_value = {"keys": [{"kid": "kid1"}]}
+        backend.get_relying_party_keys.return_value = "{}"
+        backend.get_client_registration.return_value = {"client_id": "cid", "client_secret": "secret"}
+        backend.get_state_data.return_value = "verifier"
+        backend.get_client_id_and_secret_for_provider = Mock(return_value=("cid", "secret"))
+        backend.save_configuration_token = Mock()
+        backend.delete_state_data = Mock()
+
+        # Simulate successful validate_auth_callback
+        mock_solid.validate_auth_callback.return_value = (True, {"id_token": "token"})
+        mock_jwt.return_value.claims = '{"iss": "https://issuer.example", "sub": "sub", "webid": "webid"}'
+
+        authentication_callback(backend, "auth_code", "state456", "https://issuer.example", "redirect", "base", False)
+
+        backend.delete_state_data.assert_called_once_with("state456")

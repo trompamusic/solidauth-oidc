@@ -249,6 +249,7 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, b
     auth = (client_id, client_secret) if client_secret else None
 
     code_verifier = backend.get_state_data(state)
+    backend.delete_state_data(state)
 
     keypair = solid.load_key(backend.get_relying_party_keys())
     assert code_verifier is not None, f"state {state} not in backend?"
