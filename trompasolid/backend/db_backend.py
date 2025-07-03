@@ -2,8 +2,8 @@ import datetime
 
 import sqlalchemy.exc
 
-from trompasolid.backend import SolidBackend
 from trompasolid import db, model
+from trompasolid.backend import SolidBackend
 
 
 class DBBackend(SolidBackend):
@@ -103,7 +103,10 @@ class DBBackend(SolidBackend):
     def get_state_data(self, state):
         st = self.session.query(db.State).filter_by(state=state).first()
         if st:
-            return st.code_verifier
+            return {
+                "code_verifier": st.code_verifier,
+                "issuer": st.issuer,
+            }
         else:
             return None
 
@@ -113,7 +116,7 @@ class DBBackend(SolidBackend):
             self.session.delete(st)
             self.session.commit()
 
-    def set_state_data(self, state, code_verifier):
-        st = db.State(state=state, code_verifier=code_verifier)
+    def set_state_data(self, state, code_verifier, issuer=None):
+        st = db.State(state=state, code_verifier=code_verifier, issuer=issuer)
         self.session.add(st)
         self.session.commit()

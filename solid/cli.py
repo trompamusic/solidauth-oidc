@@ -199,13 +199,15 @@ def auth_request(profileurl):
 
 
 @cli_bp.cli.command()
-@click.argument("provider")
 @click.argument("code")
 @click.argument("state")
-def exchange_auth(provider, code, state):
+@click.argument("provider", required=False)
+def exchange_auth(code, state, provider):
     """Step 5, Exchange a code for a long-term token.
 
     Provide a provider url, and the code and state that were returned in the redirect by the provider
+    Some providers don't include themselves in the &iss= parameter of the callback url, so if it's not
+    available then we'll look it up in the state data.
 
     This is the same code as `authentication_callback`, but copied here so that we can
     add additional debugging output when testing.
@@ -218,12 +220,17 @@ def exchange_auth(provider, code, state):
 
     client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_url)
     auth = (client_id, client_secret) if client_secret else None
+
+    backend_state = backend.get_state_data(state)
+    assert backend_state is not None, f"state {state} not in backend?"
+    code_verifier = backend_state["code_verifier"]
+
+    if provider is None:
+        print(f"No provider provided, using issuer from state: {backend_state['issuer']}")
+        provider = backend_state["issuer"]
     provider_config = backend.get_resource_server_configuration(provider)
 
-    code_verifier = backend.get_state_data(state)
-
     keypair = solid.load_key(backend.get_relying_party_keys())
-    assert code_verifier is not None, f"state {state} not in backend?"
 
     success, resp = solid.validate_auth_callback(
         keypair, code_verifier, code, provider_config, client_id, redirect_uri, auth
@@ -297,16 +304,20 @@ def exchange_auth_url(ctx, url):
     """
     parts = urllib.parse.urlparse(url)
     query = urllib.parse.parse_qs(parts.query)
-    if "iss" not in query or "code" not in query or "state" not in query:
-        print("Missing iss, code, or state in query string")
+    if "code" not in query or "state" not in query:
+        print("Missing code, or state in query string")
         return
-    provider = query["iss"][0]
+    if "iss" in query:
+        provider = query["iss"][0]
+    else:
+        print("No issuer in query string, will use provider from state")
+        provider = None
     code = query["code"][0]
     state = query["state"][0]
     print(f"Provider: {provider}")
     print(f"Code: {code}")
     print(f"State: {state}")
-    ctx.invoke(exchange_auth, provider=provider, code=code, state=state)
+    ctx.invoke(exchange_auth, code=code, state=state, provider=provider)
 
 
 @cli_bp.cli.command()

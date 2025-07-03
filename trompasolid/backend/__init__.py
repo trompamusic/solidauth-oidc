@@ -63,5 +63,5 @@ class SolidBackend(ABC):
         pass
 
     @abstractmethod
-    def set_state_data(self, state, code_verifier):
+    def set_state_data(self, state, code_verifier, issuer=None):
         pass

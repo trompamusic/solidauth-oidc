@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import Index, Text, TIMESTAMP, func
+from sqlalchemy import TIMESTAMP, Index, Text, func
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -73,7 +73,8 @@ class State(Base):
     __tablename__ = "pkce_state"
     id: Mapped[int] = mapped_column(primary_key=True)
     state: Mapped[str] = mapped_column(Text, nullable=False, index=True)
-    code_verifier: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    code_verifier: Mapped[str] = mapped_column(Text, nullable=False, index=False)
+    issuer: Mapped[str] = mapped_column(Text, nullable=True, index=False)
 
     def __repr__(self):
         return f"<State {self.id} ({self.state}, {self.code_verifier})>"

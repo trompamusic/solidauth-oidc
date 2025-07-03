@@ -358,11 +358,10 @@ class TestStateParameterSecurity:
     ):
         backend = Mock()
         backend.get_resource_server_configuration.return_value = {"issuer": "https://issuer.example"}
-        backend.get_state_data.return_value = "verifier"
+        backend.get_state_data.return_value = {"code_verifier": "verifier", "issuer": "https://issuer.example"}
         backend.get_resource_server_keys.return_value = {"keys": [{"kid": "kid1"}]}
         backend.get_relying_party_keys.return_value = "{}"
         backend.get_client_registration.return_value = {"client_id": "cid", "client_secret": "secret"}
-        backend.get_state_data.return_value = "verifier"
         backend.get_client_id_and_secret_for_provider = Mock(return_value=("cid", "secret"))
         backend.save_configuration_token = Mock()
         backend.delete_state_data = Mock()
@@ -385,11 +384,10 @@ class TestStateParameterSecurity:
     ):
         backend = Mock()
         backend.get_resource_server_configuration.return_value = {"issuer": "https://issuer.example"}
-        backend.get_state_data.return_value = "verifier"
+        backend.get_state_data.return_value = {"code_verifier": "verifier", "issuer": None}
         backend.get_resource_server_keys.return_value = {"keys": [{"kid": "kid1"}]}
         backend.get_relying_party_keys.return_value = "{}"
         backend.get_client_registration.return_value = {"client_id": "cid", "client_secret": "secret"}
-        backend.get_state_data.return_value = "verifier"
         backend.get_client_id_and_secret_for_provider = Mock(return_value=("cid", "secret"))
         backend.save_configuration_token = Mock()
         backend.delete_state_data = Mock()

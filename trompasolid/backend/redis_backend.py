@@ -82,12 +82,16 @@ class RedisBackend(SolidBackend):
         return self.get_redis_str(make_redis_key(CONFIG_TOKENS, issuer, profile))
 
     def get_state_data(self, state):
-        return self.get_redis_str(make_redis_key(CONFIG_STATE, state))
+        return self.get_redis_dict(make_redis_key(CONFIG_STATE, state))
 
     def delete_state_data(self, state):
         key = make_redis_key(CONFIG_STATE, state)
         key = REDIS_KEY_PREFIX + key
         return self.redis_client.delete(key)
 
-    def set_state_data(self, state, code_verifier):
-        return self.store_redis_str(make_redis_key(CONFIG_STATE, state), code_verifier)
+    def set_state_data(self, state, code_verifier, issuer=None):
+        data = {
+            "code_verifier": code_verifier,
+            "issuer": issuer,
+        }
+        return self.store_redis_dict(make_redis_key(CONFIG_STATE, state), data)

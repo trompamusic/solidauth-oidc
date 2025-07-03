@@ -217,7 +217,7 @@ def generate_authentication_url(
     state = make_random_string()
 
     assert backend.get_state_data(state) is None
-    backend.set_state_data(state, code_verifier)
+    backend.set_state_data(state, code_verifier, provider)
 
     auth_url = solid.generate_authorization_request(provider_config, redirect_url, client_id, state, code_challenge)
     log_messages.append(f"Got an auth url: {auth_url}")
@@ -243,13 +243,17 @@ def get_client_id_and_secret_for_provider(backend, provider, base_url, always_us
 
 
 def authentication_callback(backend, auth_code, state, provider, redirect_uri, base_url, always_use_client_url=False):
+    backend_state = backend.get_state_data(state)
+    code_verifier = backend_state["code_verifier"]
+
+    if provider is None:
+        provider = backend_state["issuer"]
+    backend.delete_state_data(state)
+
     provider_config = backend.get_resource_server_configuration(provider)
 
     client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_url)
     auth = (client_id, client_secret) if client_secret else None
-
-    code_verifier = backend.get_state_data(state)
-    backend.delete_state_data(state)
 
     keypair = solid.load_key(backend.get_relying_party_keys())
     assert code_verifier is not None, f"state {state} not in backend?"
