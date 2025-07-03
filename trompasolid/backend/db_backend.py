@@ -63,40 +63,64 @@ class DBBackend(SolidBackend):
             return None
 
     def save_client_registration(self, provider, registration):
-        cr = db.ClientRegistration(provider=provider, data=registration)
+        client_id = registration["client_id"]
+        cr = db.ClientRegistration(provider=provider, client_id=client_id, data=registration)
         self.session.add(cr)
         self.session.commit()
 
-    def save_configuration_token(self, issuer, profile, sub, token):
+    def save_configuration_token(self, issuer, profile, sub, client_id, token):
         # In the case that the token already exists, update it
-        existing_token = self.get_configuration_token(issuer, profile)
+        existing_token = self.get_configuration_token(issuer, profile, client_id)
         if existing_token:
-            self.update_configuration_token(issuer, profile, token)
+            self.update_configuration_token(issuer, profile, client_id, token)
             return
         else:
-            ct = db.ConfigurationToken(issuer=issuer, profile=profile, sub=sub, data=token)
+            # Look up the client registration to set the foreign key
+            client_registration = self.session.query(db.ClientRegistration).filter_by(client_id=client_id).first()
+
+            ct = db.ConfigurationToken(
+                issuer=issuer,
+                profile=profile,
+                sub=sub,
+                client_id=client_id,
+                data=token,
+                client_registration_id=client_registration.id if client_registration else None,
+            )
             self.session.merge(ct)
             self.session.commit()
 
-    def update_configuration_token(self, issuer, profile, token):
-        ct = self.session.query(db.ConfigurationToken).filter_by(issuer=issuer, profile=profile).first()
+    def update_configuration_token(self, issuer, profile, client_id, token):
+        ct = (
+            self.session.query(db.ConfigurationToken)
+            .filter_by(issuer=issuer, profile=profile, client_id=client_id)
+            .first()
+        )
         if ct:
             ct.data = token
             ct.added = datetime.datetime.now(tz=datetime.timezone.utc)
             self.session.add(ct)
             self.session.commit()
 
-    def get_configuration_token(self, issuer, profile):
-        ct = self.session.query(db.ConfigurationToken).filter_by(issuer=issuer, profile=profile).first()
+    def get_configuration_token(self, issuer, profile, client_id):
+        ct = (
+            self.session.query(db.ConfigurationToken)
+            .filter_by(issuer=issuer, profile=profile, client_id=client_id)
+            .first()
+        )
+
         if ct:
-            return model.ConfigurationToken(issuer=ct.issuer, sub=ct.sub, profile=ct.sub, added=ct.added, data=ct.data)
+            return model.ConfigurationToken(
+                issuer=ct.issuer, sub=ct.sub, profile=ct.profile, client_id=ct.client_id, added=ct.added, data=ct.data
+            )
         else:
             return None
 
     def get_configuration_tokens(self):
         cts = self.session.query(db.ConfigurationToken).all()
         return [
-            model.ConfigurationToken(issuer=ct.issuer, sub=ct.sub, profile=ct.sub, added=ct.added, data=ct.data)
+            model.ConfigurationToken(
+                issuer=ct.issuer, sub=ct.sub, profile=ct.profile, client_id=ct.client_id, added=ct.added, data=ct.data
+            )
             for ct in cts
         ]
 

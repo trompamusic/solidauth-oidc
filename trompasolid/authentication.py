@@ -20,6 +20,12 @@ class ClientDoesNotSupportDynamicRegistration(Exception):
     pass
 
 
+class BadClientIdError(Exception):
+    """Raised when client registration is missing or invalid."""
+
+    pass
+
+
 class IDTokenValidationError(Exception):
     """Raised when ID token validation fails."""
 
@@ -151,7 +157,7 @@ def get_jwt_kid(token):
 
 
 def generate_authentication_url(
-    backend, webid_or_provider, client_name, redirect_url, base_url, always_use_client_url=False
+    backend, webid_or_provider, client_name, redirect_url, base_url, always_use_client_id_document=False
 ):
     log_messages = []
 
@@ -190,14 +196,14 @@ def generate_authentication_url(
             f"Registration endpoint: {provider_config.get('registration_endpoint', 'not available')}"
         )
 
-    if always_use_client_url:
+    if always_use_client_id_document:
         # Generate a client URL that points to our client metadata document
         # Section 5 of the Solid-OIDC spec (https://solidproject.org/TR/oidc#clientids) says
         # OAuth and OIDC require the Client application to identify itself to the OP and RS by presenting a client identifier (Client ID). Solid applications SHOULD use a URI that can be dereferenced as a Client ID Document.
         # this means that "token_endpoint_auth_methods_supported" should include "none", otherwise this is not supported
         issuer = provider_config["issuer"]
         client_id = get_client_url_for_issuer(base_url, issuer)
-        log_messages.append(f"genererating a dereferenced URL for client_id: {client_id}")
+        log_messages.append(f"Using a client id document: {client_id}")
         log_messages.append("Not performing dynamic registration, will use client_id as a URL")
     else:
         log_messages.append("Using dynamic client registration")
@@ -225,13 +231,20 @@ def generate_authentication_url(
     return {"provider": provider, "auth_url": auth_url, "log_messages": log_messages}
 
 
-def get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_url=False):
+def get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_id_document=False):
     provider_config = backend.get_resource_server_configuration(provider)
 
-    if not always_use_client_url:
+    if not always_use_client_id_document:
         client_registration = backend.get_client_registration(provider)
         if not client_registration:
-            raise Exception("Expected to find a registration for a backend but can't get one")
+            raise BadClientIdError(f"No client registration found for provider {provider}")
+
+        if "client_id" not in client_registration:
+            raise BadClientIdError(f"Client registration for provider {provider} is missing client_id")
+
+        if "client_secret" not in client_registration:
+            raise BadClientIdError(f"Client registration for provider {provider} is missing client_secret")
+
         client_id = client_registration["client_id"]
         client_secret = client_registration["client_secret"]
     else:
@@ -242,8 +255,17 @@ def get_client_id_and_secret_for_provider(backend, provider, base_url, always_us
     return client_id, client_secret
 
 
-def authentication_callback(backend, auth_code, state, provider, redirect_uri, base_url, always_use_client_url=False):
+def authentication_callback(
+    backend, auth_code, state, provider, redirect_uri, base_url, always_use_client_id_document=False
+):
     backend_state = backend.get_state_data(state)
+
+    if backend_state is None:
+        return False, {
+            "error": "invalid_state",
+            "error_description": f"State '{state}' not found or already used. Please start a new authentication flow.",
+        }
+
     code_verifier = backend_state["code_verifier"]
 
     if provider is None:
@@ -252,7 +274,9 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, b
 
     provider_config = backend.get_resource_server_configuration(provider)
 
-    client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_url)
+    client_id, client_secret = get_client_id_and_secret_for_provider(
+        backend, provider, base_url, always_use_client_id_document
+    )
     auth = (client_id, client_secret) if client_secret else None
 
     keypair = solid.load_key(backend.get_relying_party_keys())
@@ -295,7 +319,7 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, b
                 webid = claims["sub"]
             issuer = claims["iss"]
             sub = claims["sub"]
-            backend.save_configuration_token(issuer, webid, sub, resp)
+            backend.save_configuration_token(issuer, webid, sub, client_id, resp)
 
             return True, resp
 

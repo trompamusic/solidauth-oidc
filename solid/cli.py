@@ -102,7 +102,8 @@ def get_provider_configuration(provider):
 
 @cli_bp.cli.command()
 @click.argument("provider")
-def register(provider):
+@click.option("--use-client-id-document", is_flag=True, help="Use client ID document instead of dynamic registration")
+def register(provider, use_client_id_document):
     """Step 3, Register with the OP.
     Pass in the provider url from `get-provider-configuration` or `get-provider-configuration-from-profile`
 
@@ -129,7 +130,7 @@ def register(provider):
             f"Registration endpoint: {provider_config.get('registration_endpoint', 'not available')}"
         )
 
-    if current_app.config["ALWAYS_USE_CLIENT_URL"]:
+    if use_client_id_document:
         # Generate a client URL that points to our client metadata document
         # Section 5 of the Solid-OIDC spec (https://solidproject.org/TR/oidc#clientids) says
         # OAuth and OIDC require the Client application to identify itself to the OP and RS by presenting a client identifier (Client ID). Solid applications SHOULD use a URI that can be dereferenced as a Client ID Document.
@@ -141,7 +142,7 @@ def register(provider):
         base_url = current_app.config["BASE_URL"]
         client_id = get_client_url_for_issuer(base_url, issuer)
         print("App config requests what we use a client ID document, not dynamic registration")
-        print(f"   (config.ALWAYS_USE_CLIENT_URL is {current_app.config['ALWAYS_USE_CLIENT_URL']})")
+        print("   (--use-client-id-document flag is set)")
         print("as a result, registration doesn't exist. Move directly to auth request")
         return
     else:
@@ -158,19 +159,19 @@ def register(provider):
 
 @cli_bp.cli.command()
 @click.argument("profileurl")
-def auth_request(profileurl):
+@click.option("--use-client-id-document", is_flag=True, help="Use client ID document instead of dynamic registration")
+def auth_request(profileurl, use_client_id_document):
     """Step 4, Perform an authorization request.
 
     Provide a user's profile url
     """
     provider = solid.lookup_provider_from_profile(profileurl)
 
-    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
     base_url = current_app.config["BASE_URL"]
 
     provider_configuration = get_backend().get_resource_server_configuration(provider)
 
-    if always_use_client_url:
+    if use_client_id_document:
         print("Using client_id as URL for auth request")
         issuer = provider_configuration["issuer"]
         base_url = current_app.config["BASE_URL"]
@@ -202,7 +203,8 @@ def auth_request(profileurl):
 @click.argument("code")
 @click.argument("state")
 @click.argument("provider", required=False)
-def exchange_auth(code, state, provider):
+@click.option("--use-client-id-document", is_flag=True, help="Use client ID document instead of dynamic registration")
+def exchange_auth(code, state, provider, use_client_id_document):
     """Step 5, Exchange a code for a long-term token.
 
     Provide a provider url, and the code and state that were returned in the redirect by the provider
@@ -216,9 +218,10 @@ def exchange_auth(code, state, provider):
     backend = get_backend()
     redirect_uri = current_app.config["REDIRECT_URL"]
     base_url = current_app.config["BASE_URL"]
-    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
 
-    client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_url)
+    client_id, client_secret = get_client_id_and_secret_for_provider(
+        backend, provider, base_url, use_client_id_document
+    )
     auth = (client_id, client_secret) if client_secret else None
 
     backend_state = backend.get_state_data(state)
@@ -269,7 +272,7 @@ def exchange_auth(code, state, provider):
                 webid = claims["sub"]
             issuer = claims["iss"]
             sub = claims["sub"]
-            backend.save_configuration_token(issuer, webid, sub, resp)
+            backend.save_configuration_token(issuer, webid, sub, client_id, resp)
             print("Successfully validated ID token and saved configuration")
             return True, resp
 
@@ -297,8 +300,9 @@ def exchange_auth(code, state, provider):
 
 @cli_bp.cli.command()
 @click.argument("url")
+@click.option("--use-client-id-document", is_flag=True, help="Use client ID document instead of dynamic registration")
 @click.pass_context
-def exchange_auth_url(ctx, url):
+def exchange_auth_url(ctx, url, use_client_id_document):
     """
     Step 5b, Exchange an auth url for a token, from a redirect url
     """
@@ -317,32 +321,35 @@ def exchange_auth_url(ctx, url):
     print(f"Provider: {provider}")
     print(f"Code: {code}")
     print(f"State: {state}")
-    ctx.invoke(exchange_auth, code=code, state=state, provider=provider)
+    ctx.invoke(exchange_auth, code=code, state=state, provider=provider, use_client_id_document=use_client_id_document)
 
 
 @cli_bp.cli.command()
 @click.argument("profile")
-def refresh(profile):
+@click.option("--use-client-id-document", is_flag=True, help="Use client ID document instead of dynamic registration")
+def refresh(profile, use_client_id_document):
     provider = solid.lookup_provider_from_profile(profile)
     backend = get_backend()
 
     keypair = solid.load_key(backend.get_relying_party_keys())
     provider_info = backend.get_resource_server_configuration(provider)
 
-    configuration_token = backend.get_configuration_token(provider, profile)
+    base_url = current_app.config["BASE_URL"]
+    client_id, client_secret = get_client_id_and_secret_for_provider(
+        backend, provider, base_url, use_client_id_document
+    )
+
+    configuration_token = backend.get_configuration_token(provider, profile, client_id)
     if not configuration_token.has_expired():
         print("Configuration token has not expired, skipping refresh")
         return
-    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
-    base_url = current_app.config["BASE_URL"]
-    client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_url)
 
     status, resp = solid.refresh_auth_token(keypair, provider_info, client_id, configuration_token)
     print(f"{status=}")
     print(resp)
 
     if status:
-        backend.update_configuration_token(provider, profile, resp)
+        backend.update_configuration_token(provider, profile, client_id, resp)
         print("Token updated")
     else:
         print(f"Failure updating token: {status}")

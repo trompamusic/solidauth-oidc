@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block body %}
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading">Authentication Error</h4>
+        <p>{{ error_message }}</p>
+        <hr>
+        <p class="mb-0">
+            <a href="/" class="btn btn-primary">Start Over</a>
+        </p>
+    </div>
+{% endblock %}

@@ -13,11 +13,19 @@ def set_backend(backend_):
     backend = backend_
 
 
-def get_bearer_for_user(provider, profile, url, method):
+def get_bearer_for_user(provider, profile, url, method, client_id=None):
     """Given a solid provider, and a user vcard, get the bearer token needed
     to write to this provider as the user."""
 
-    configuration_token = backend.get_configuration_token(provider, profile)
+    if client_id is None:
+        # Try to get the client_id from client registration
+        client_registration = backend.get_client_registration(provider)
+        if client_registration:
+            client_id = client_registration["client_id"]
+        else:
+            raise ValueError("No client registration found and no client_id provided")
+
+    configuration_token = backend.get_configuration_token(provider, profile, client_id)
     if not configuration_token:
         raise ValueError("No configuration for this provider/user")
 
@@ -35,7 +43,7 @@ def get_bearer_for_user(provider, profile, url, method):
             if "refresh_token" not in resp:
                 resp.update({"refresh_token": refresh_token})
             access_token = resp["access_token"]
-            backend.update_configuration_token(provider, profile, resp)
+            backend.update_configuration_token(provider, profile, client_id, resp)
             print("... refreshed")
         else:
             print("... refresh failed")

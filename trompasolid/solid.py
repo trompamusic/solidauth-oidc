@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import logging
 import urllib.parse
 from urllib.error import HTTPError
 
@@ -12,6 +13,8 @@ from oic.oic import Client as OicClient
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
 from trompasolid.dpop import make_random_string, make_token_for
+
+logger = logging.getLogger(__name__)
 
 
 def lookup_provider_from_profile(profile_url: str):

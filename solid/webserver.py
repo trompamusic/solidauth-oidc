@@ -1,3 +1,4 @@
+from logging.config import dictConfig
 from typing import Optional
 
 import flask
@@ -8,7 +9,12 @@ import trompasolid.solid
 from solid import constants, db, extensions
 from solid.admin import init_admin
 from solid.auth import LoginForm, is_safe_url
-from trompasolid.authentication import NoProviderError, authentication_callback, generate_authentication_url
+from trompasolid.authentication import (
+    BadClientIdError,
+    NoProviderError,
+    authentication_callback,
+    generate_authentication_url,
+)
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
 from trompasolid.backend.redis_backend import RedisBackend
@@ -16,7 +22,38 @@ from trompasolid.backend.redis_backend import RedisBackend
 backend: Optional[SolidBackend] = None
 
 
+def configure_logging():
+    print("Configuring logging")
+    dictConfig(
+        {
+            "version": 1,
+            "formatters": {
+                "default": {
+                    "format": "[%(asctime)s] %(levelname)s in %(module)s: %(message)s",
+                }
+            },
+            "handlers": {
+                "wsgi": {
+                    "class": "logging.StreamHandler",
+                    "stream": "ext://flask.logging.wsgi_errors_stream",
+                    "formatter": "default",
+                },
+                "console": {
+                    "class": "logging.StreamHandler",
+                    "stream": "ext://sys.stdout",
+                    "formatter": "default",
+                },
+            },
+            "loggers": {
+                "trompasolid": {"level": "DEBUG", "handlers": ["console"], "propagate": False},
+                "solid": {"level": "DEBUG", "handlers": ["console"], "propagate": False},
+            },
+        }
+    )
+
+
 def create_app():
+    configure_logging()
     app = flask.Flask(__name__, template_folder="../templates")
     app.config.from_pyfile("../config.py")
     extensions.admin.init_app(app)
@@ -127,19 +164,20 @@ def logout():
 @webserver_bp.route("/register", methods=["POST"])
 def web_register():
     webid = request.form.get("webid_or_provider")
+    use_client_id_document = request.form.get("use_client_id_document") == "on"
 
     redirect_url = current_app.config["REDIRECT_URL"]
     base_url = current_app.config["BASE_URL"]
-    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
     try:
         data = generate_authentication_url(
-            backend, webid, constants.client_name, redirect_url, base_url, always_use_client_url
+            backend, webid, constants.client_name, redirect_url, base_url, use_client_id_document
         )
         provider = data["provider"]
         auth_url = data["auth_url"]
         log_messages = data["log_messages"]
 
         flask.session["provider"] = provider
+        flask.session["use_client_id_document"] = use_client_id_document
 
         return flask.render_template("register.html", log_messages=log_messages, auth_url=auth_url)
 
@@ -160,10 +198,15 @@ def web_redirect():
 
     redirect_uri = current_app.config["REDIRECT_URL"]
     base_url = current_app.config["BASE_URL"]
-    always_use_client_url = current_app.config["ALWAYS_USE_CLIENT_URL"]
-    success, data = authentication_callback(
-        backend, auth_code, state, provider, redirect_uri, base_url, always_use_client_url
-    )
+    use_client_id_document = flask.session.get("use_client_id_document", False)
+
+    try:
+        success, data = authentication_callback(
+            backend, auth_code, state, provider, redirect_uri, base_url, use_client_id_document
+        )
+    except BadClientIdError as e:
+        error_message = f"Client registration error: {str(e)}"
+        return flask.render_template("error.html", error_message=error_message)
 
     if success:
         # TODO: If we want, we can make the original auth page include a redirect URL field, and redirect the user
@@ -172,6 +215,11 @@ def web_redirect():
         redirect_after = session.get("redirect_after")
         return flask.render_template("success.html", redirect_after=redirect_after)
     else:
-        print("Error when validating auth callback")
         print(data)
+
+        # Handle specific error cases
+        if data.get("error") == "invalid_state":
+            error_message = "This authentication link has already been used or has expired. Please start a new authentication process."
+            return flask.render_template("error.html", error_message=error_message)
+
         return "Error when validating auth callback", 500

@@ -1,8 +1,8 @@
 import datetime
 
-from sqlalchemy import TIMESTAMP, Index, Text, func
+from sqlalchemy import TIMESTAMP, ForeignKey, Index, Text, func
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
@@ -44,7 +44,11 @@ class ClientRegistration(Base):
     __tablename__ = "client_registration"
     id: Mapped[int] = mapped_column(primary_key=True)
     provider: Mapped[str] = mapped_column(Text, nullable=False, index=True, unique=True)
+    client_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     data: Mapped[dict] = mapped_column(postgresql.JSONB)
+    configuration_tokens: Mapped[list["ConfigurationToken"]] = relationship(
+        "ConfigurationToken", back_populates="client_registration"
+    )
 
     def __repr__(self):
         return f"<ClientRegistration {self.id} ({self.provider})>"
@@ -53,6 +57,7 @@ class ClientRegistration(Base):
 class ConfigurationToken(Base):
     __tablename__ = "configuration_token"
     id: Mapped[int] = mapped_column(primary_key=True)
+    client_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     issuer: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     sub: Mapped[str] = mapped_column(Text, nullable=False)
     profile: Mapped[str] = mapped_column(Text, nullable=False)
@@ -60,13 +65,17 @@ class ConfigurationToken(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
     data: Mapped[dict] = mapped_column(postgresql.JSONB)
+    client_registration_id: Mapped[int] = mapped_column(ForeignKey("client_registration.id"), nullable=True)
+    client_registration: Mapped["ClientRegistration"] = relationship(
+        "ClientRegistration", back_populates="configuration_tokens"
+    )
     __table_args__ = (
-        Index("configuration_token_idx_issuer_sub", "issuer", "sub", unique=True),
-        Index("configuration_token_idx_issuer_profile", "issuer", "profile", unique=True),
+        Index("configuration_token_idx_issuer_sub", "issuer", "sub", "client_id", unique=True),
+        Index("configuration_token_idx_issuer_profile", "issuer", "profile", "client_id", unique=True),
     )
 
     def __repr__(self):
-        return f"<ConfigurationToken {self.id} ({self.issuer}, {self.sub})>"
+        return f"<ConfigurationToken {self.id} ({self.issuer}, {self.sub}, {self.client_id})>"
 
 
 class State(Base):

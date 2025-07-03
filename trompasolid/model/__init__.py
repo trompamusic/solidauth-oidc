@@ -27,6 +27,7 @@ class ConfigurationToken:
     issuer: str
     sub: str
     profile: str
+    client_id: str
     added: datetime.datetime
     data: dict
 
