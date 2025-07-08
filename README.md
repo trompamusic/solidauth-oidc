@@ -82,6 +82,128 @@ We have a set of commandline tools to perform the steps needed to perform an aut
 	    uv run flask cli refresh https://alastairp.solidcommunity.net/profile/card#me
 
 
+# Using the library in other projects
+You can use this library from another application.
+
+The main interfaces are in the `trompasolid` package.
+You need to decide if you want to use the redis or the db backend:
+
+```py
+from trompasolid.backend.db_backend import DBBackend
+from trompasolid.backend.redis_backend import RedisBackend
+from trompasolid.db import Base
+from trompasolid import client
+
+client.set_backend(DBBackend(db.session))
+client.set_backend(RedisBackend(redis_client))
+
+# Create the database tables if you use the DBBackend
+Base.metadata.create_all(db.engine)
+```
+
+## Workflow
+
+Review the command-line steps above to see the general process that you will need to follow.
+A user will come with a web-id (which is a URL). By looking up the URL you can identify the "provider" where this
+webid is registered.
+
+### 1.
+Use `trompasolid.authentication.generate_authentication_url` to get some information about the provider, (optionally) register
+a client with it, and get a URL to sent the user to to complete the authentication request
+
+```py
+def generate_authentication_url(
+    backend, webid_or_provider, registration_request, redirect_url, client_id_document_url=None
+):
+```
+
+Arguments:
+
+   - `backend`: A backend to use
+   - `webid_or_provider`: The webid of the user who wants to authenticate
+   - `registration_request`: If you want to perform dynamic registration (client_id_document_url is None), the contents of the registration request
+   - `redirect_url`: Where you want the provider to redirect you to after the user gives you permission. This must be a URL present in the client document/registration request
+   - `client_id_document_url`: If you want to use a client id document, the URL to this document. Use `None` to perform dynamic registration
+
+Dynamic registration creates an openid client on the fly and returns a client id and secret which can be used as you
+would "normally" do with openid. Alternatively, solid allows you to use a "client id document", where you
+specify a URL in your client_id, and you have no client_secret.
+
+If you want to use Client ID Documents then you need to provide a public endpoint which serves the
+document with a `Content-Type: application/ld+json` header. See `solid/__init__.py` and `solid.webserver.client_id_url()`
+for an example of this document. Note that the document needs to include its own URL as the `"client_id"` field.
+More documentation on registration is available at https://solidproject.org/TR/oidc#clientids
+
+If you set `client_id_document_url` to `None`, then this method will automatically perform a client registration
+using the data in `registration_request`, and will store the client information to the backend.
+See more about dynamic registration at https://openid.net/specs/openid-connect-registration-1_0.html
+
+The method will save a PKCE state and code in the backend and return the URL that you need to send the user to.
+
+
+### 2.
+At the redirect url, use `trompasolid.authentication.generate_authentication_url` to perform PKCE validation and key exchange
+
+```py
+def authentication_callback(
+    backend, auth_code, state, provider, redirect_uri, base_url, always_use_client_id_document=False
+):
+```
+
+Arguments:
+  - `backend`: A backend to use
+  - `auth_code`: The PKCE `code` GET parameter returned in the callback URL
+  - `state`: The PKCE `state` GET parameter returned in the callback URL
+  - `provider`: The provider that you were redirected from. Some providers pass this in the `iss` GET parameter,
+    but if not then you should store it in a client state at the previous step and retrieve it.
+  - `redirect_uri`: The URL of this endpoint
+  - `client_id_document_url`: As above
+
+### 3.
+
+To make an authenticated request as this user, use `trompasolid.client.get_bearer_for_user` to get the headers needed for this request
+Make sure you use `client.set_backend` first (yes, this is inconsistent with the `trompasolid.authentication` package)
+
+```py
+def get_bearer_for_user(provider, profile, url, method, client_id_document_url=None):
+```
+
+Arguments:
+  - `provider`: The provider that the user authenticated at
+  - `profile`: The web id of the user making the request
+  - `url`: The URL of the request
+  - `method`: The HTTP method of the request
+  - `client_id_document`: Set to a client id document if using this, otherwise set to `None` to use the client for this provider which
+    was created with dynamic registration.
+
+```py
+    provider = "https://solidcommunity.net/"
+    profile = "https://username.solidcommunity.net/profile/card#me"
+    container = "https://username.solidcommunity.net/location/"
+    client_id_document = "https://example.com/solid-client.jsonld"
+    headers = get_bearer_for_user(provider, profile, container, "OPTIONS", client_id_document_url)
+    r = requests.options(container, headers=headers)
+```
+
+
+# Solid-OICD Notes
+
+## Spec compliance
+
+Solid-OIDC is still an evolving standard. Therefore we cannot guarantee full compliance with the specification. We have tested this library
+with the following solid provider software:
+
+ - ESS (Enterprise solid server)
+ - CSS (Community solid server)
+ - Pivot (CSS fork)
+ - NSS (Node solid server)
+ - Trinpod
+
+We know of the following issues with some providers and with our implementation:
+
+ - We do not check the features that a provider supports before trying to do a registration, and modifying our request to contain only these features
+ - NSS does not support client id documents
+
 # Acknowledgements
 
 Some of this code was taken from the [solid-flask](https://gitlab.com/agentydragon/solid-flask) project.

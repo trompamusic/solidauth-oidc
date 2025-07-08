@@ -1,18 +1,19 @@
 import json
+import logging
 import urllib.parse
 
 import click
 import jwcrypto.jwk
 import jwcrypto.jwt
-from flask import Blueprint, current_app
+from flask import Blueprint, current_app, url_for
 
-from solid import constants, extensions
+from solid import extensions, get_sample_client_registration
+from solid.webserver import CLIENT_ID_DOCUMENT_SUFFIX
 from trompasolid import solid
 from trompasolid.authentication import (
     ClientDoesNotSupportDynamicRegistration,
     IDTokenValidationError,
     get_client_id_and_secret_for_provider,
-    get_client_url_for_issuer,
     get_jwt_kid,
     select_jwk_by_kid,
     validate_id_token_claims,
@@ -23,6 +24,7 @@ from trompasolid.backend.redis_backend import RedisBackend
 from trompasolid.dpop import make_random_string
 
 cli_bp = Blueprint("cli", __name__)
+logger = logging.getLogger(__name__)
 
 
 def get_backend() -> SolidBackend:
@@ -138,18 +140,20 @@ def register(provider, use_client_id_document):
         # https://github.com/solid/solid-oidc/issues/78
         # If we want to use this, then there is no "registration" step, we just use the URL as the client_id
         # at the auth request step.
-        issuer = provider_config["issuer"]
         base_url = current_app.config["BASE_URL"]
-        client_id = get_client_url_for_issuer(base_url, issuer)
+        client_id = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
         print("App config requests what we use a client ID document, not dynamic registration")
         print("   (--use-client-id-document flag is set)")
         print("as a result, registration doesn't exist. Move directly to auth request")
         return
     else:
         print("Requested to do dynamic client registration")
-        client_registration = solid.dynamic_registration(
-            provider, constants.client_name, current_app.config["REDIRECT_URL"], provider_config
+        registration_request = get_sample_client_registration(
+            current_app.config["BASE_URL"], [current_app.config["REDIRECT_URL"]]
         )
+        # Set a different name so that we can differentiate between a client id documents and dynamic registration during testing
+        registration_request["client_name"] = "Solid OIDC test app (dynamic registration)"
+        client_registration = solid.dynamic_registration(registration_request, provider_config)
         get_backend().save_client_registration(provider, client_registration)
 
         print("Registered client with provider")
@@ -173,9 +177,8 @@ def auth_request(profileurl, use_client_id_document):
 
     if use_client_id_document:
         print("Using client_id as URL for auth request")
-        issuer = provider_configuration["issuer"]
         base_url = current_app.config["BASE_URL"]
-        client_id = get_client_url_for_issuer(base_url, issuer)
+        client_id = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
     else:
         print("Using client from dynamic registration for auth request")
         client_registration = get_backend().get_client_registration(provider)
@@ -217,12 +220,12 @@ def exchange_auth(code, state, provider, use_client_id_document):
 
     backend = get_backend()
     redirect_uri = current_app.config["REDIRECT_URL"]
-    base_url = current_app.config["BASE_URL"]
 
-    client_id, client_secret = get_client_id_and_secret_for_provider(
-        backend, provider, base_url, use_client_id_document
-    )
-    auth = (client_id, client_secret) if client_secret else None
+    if use_client_id_document:
+        auth = None
+    else:
+        client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider)
+        auth = (client_id, client_secret)
 
     backend_state = backend.get_state_data(state)
     assert backend_state is not None, f"state {state} not in backend?"

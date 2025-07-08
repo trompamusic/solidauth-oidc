@@ -13,32 +13,38 @@ def set_backend(backend_):
     backend = backend_
 
 
-def get_bearer_for_user(provider, profile, url, method, client_id=None):
+def get_bearer_for_user(provider, profile, url, method, client_id_document_url=None):
     """Given a solid provider, and a user vcard, get the bearer token needed
     to write to this provider as the user."""
 
-    if client_id is None:
-        # Try to get the client_id from client registration
+    lookup_client_id_from_registration = True
+    client_id = None
+    if client_id_document_url:
+        configuration_token = backend.get_configuration_token(provider, profile, client_id_document_url)
+        if configuration_token:
+            client_id = client_id_document_url
+            lookup_client_id_from_registration = False
+
+    if lookup_client_id_from_registration:
+        # Either client_id_document_url was not provided, or it was provided but we didn't find a configuration token for it
         client_registration = backend.get_client_registration(provider)
         if client_registration:
             client_id = client_registration["client_id"]
+            configuration_token = backend.get_configuration_token(provider, profile, client_id)
+            if not configuration_token:
+                raise ValueError("No configuration for this provider/user")
         else:
-            raise ValueError("No client registration found and no client_id provided")
-
-    configuration_token = backend.get_configuration_token(provider, profile, client_id)
-    if not configuration_token:
-        raise ValueError("No configuration for this provider/user")
+            raise ValueError("No client registration found and no client_id_document_url provided")
 
     access_token = configuration_token.data["access_token"]
 
     if configuration_token.has_expired():
         print(f"Token for {profile} has expired, refreshing")
-        client_registration = backend.get_client_registration(provider)
 
         refresh_token = configuration_token.data["refresh_token"]
         keypair = solid.load_key(backend.get_relying_party_keys())
         provider_info = backend.get_resource_server_configuration(provider)
-        status, resp = solid.refresh_auth_token(keypair, provider_info, client_registration, configuration_token)
+        status, resp = solid.refresh_auth_token(keypair, provider_info, client_id, configuration_token)
         if status:
             if "refresh_token" not in resp:
                 resp.update({"refresh_token": refresh_token})

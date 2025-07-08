@@ -109,19 +109,12 @@ def op_can_do_dynamic_registration(op_config):
     return "registration_endpoint" in op_config
 
 
-def dynamic_registration(provider, client_name, redirect_url, op_config):
+def dynamic_registration(registration_request, op_config):
     """Register an app with a provider"""
     if "registration_endpoint" not in op_config:
         raise ValueError("Cannot find 'registration_endpoint'")
 
     client = OicClient(client_authn_method=CLIENT_AUTHN_METHOD)
-    registration_request = {
-        "redirect_uris": [redirect_url],
-        "grant_types": ["authorization_code", "client_credentials", "refresh_token"],
-        "response_types": ["code"],
-        "token_endpoint_auth_method": "client_secret_basic",
-        "client_name": client_name,
-    }
     registration_response = client.register(op_config["registration_endpoint"], **registration_request)
     print("Registration response:", registration_response)
     return registration_response.to_dict()

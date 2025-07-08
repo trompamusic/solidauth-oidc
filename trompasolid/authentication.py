@@ -1,6 +1,5 @@
 import json
 import time
-import zlib
 
 import jwcrypto.jwk
 import jwcrypto.jwt
@@ -102,14 +101,6 @@ def validate_id_token_claims(claims, expected_issuer, client_id, max_age=None, n
             raise IDTokenValidationError(f"Invalid nonce: expected {nonce}, got {token_nonce}")
 
 
-def get_client_url_for_issuer(baseurl, issuer):
-    if not baseurl.endswith("/"):
-        baseurl += "/"
-    issuer_hash = zlib.adler32(issuer.encode())
-    client_url = baseurl + f"client/{issuer_hash}.jsonld"
-    return client_url
-
-
 def select_jwk_by_kid(jwks, kid):
     """
     Select the correct JWK from a JWKS based on the key ID (kid).
@@ -157,7 +148,7 @@ def get_jwt_kid(token):
 
 
 def generate_authentication_url(
-    backend, webid_or_provider, client_name, redirect_url, base_url, always_use_client_id_document=False
+    backend, webid_or_provider, registration_request, redirect_url, client_id_document_url=None
 ):
     log_messages = []
 
@@ -196,13 +187,8 @@ def generate_authentication_url(
             f"Registration endpoint: {provider_config.get('registration_endpoint', 'not available')}"
         )
 
-    if always_use_client_id_document:
-        # Generate a client URL that points to our client metadata document
-        # Section 5 of the Solid-OIDC spec (https://solidproject.org/TR/oidc#clientids) says
-        # OAuth and OIDC require the Client application to identify itself to the OP and RS by presenting a client identifier (Client ID). Solid applications SHOULD use a URI that can be dereferenced as a Client ID Document.
-        # this means that "token_endpoint_auth_methods_supported" should include "none", otherwise this is not supported
-        issuer = provider_config["issuer"]
-        client_id = get_client_url_for_issuer(base_url, issuer)
+    if client_id_document_url:
+        client_id = client_id_document_url
         log_messages.append(f"Using a client id document: {client_id}")
         log_messages.append("Not performing dynamic registration, will use client_id as a URL")
     else:
@@ -212,7 +198,7 @@ def generate_authentication_url(
             # TODO: Check if redirect url is the same as the one configured here
             log_messages.append(f"Registration for {provider} already exists, skipping")
         else:
-            client_registration = solid.dynamic_registration(provider, client_name, redirect_url, provider_config)
+            client_registration = solid.dynamic_registration(registration_request, provider_config)
             backend.save_client_registration(provider, client_registration)
             log_messages.append("Registered client with provider")
         client_id = client_registration["client_id"]
@@ -231,33 +217,24 @@ def generate_authentication_url(
     return {"provider": provider, "auth_url": auth_url, "log_messages": log_messages}
 
 
-def get_client_id_and_secret_for_provider(backend, provider, base_url, always_use_client_id_document=False):
-    provider_config = backend.get_resource_server_configuration(provider)
+def get_client_id_and_secret_for_provider(backend, provider):
+    client_registration = backend.get_client_registration(provider)
+    if not client_registration:
+        raise BadClientIdError(f"No client registration found for provider {provider}")
 
-    if not always_use_client_id_document:
-        client_registration = backend.get_client_registration(provider)
-        if not client_registration:
-            raise BadClientIdError(f"No client registration found for provider {provider}")
+    if "client_id" not in client_registration:
+        raise BadClientIdError(f"Client registration for provider {provider} is missing client_id")
 
-        if "client_id" not in client_registration:
-            raise BadClientIdError(f"Client registration for provider {provider} is missing client_id")
+    if "client_secret" not in client_registration:
+        raise BadClientIdError(f"Client registration for provider {provider} is missing client_secret")
 
-        if "client_secret" not in client_registration:
-            raise BadClientIdError(f"Client registration for provider {provider} is missing client_secret")
-
-        client_id = client_registration["client_id"]
-        client_secret = client_registration["client_secret"]
-    else:
-        issuer = provider_config["issuer"]
-        client_id = get_client_url_for_issuer(base_url, issuer)
-        client_secret = None
+    client_id = client_registration["client_id"]
+    client_secret = client_registration["client_secret"]
 
     return client_id, client_secret
 
 
-def authentication_callback(
-    backend, auth_code, state, provider, redirect_uri, base_url, always_use_client_id_document=False
-):
+def authentication_callback(backend, auth_code, state, provider, redirect_uri, client_id_document_url=None):
     backend_state = backend.get_state_data(state)
 
     if backend_state is None:
@@ -274,10 +251,12 @@ def authentication_callback(
 
     provider_config = backend.get_resource_server_configuration(provider)
 
-    client_id, client_secret = get_client_id_and_secret_for_provider(
-        backend, provider, base_url, always_use_client_id_document
-    )
-    auth = (client_id, client_secret) if client_secret else None
+    if client_id_document_url:
+        client_id = client_id_document_url
+        auth = None
+    else:
+        client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider)
+        auth = (client_id, client_secret)
 
     keypair = solid.load_key(backend.get_relying_party_keys())
     assert code_verifier is not None, f"state {state} not in backend?"
