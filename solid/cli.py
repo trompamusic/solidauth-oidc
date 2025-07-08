@@ -1,10 +1,13 @@
 import json
 import logging
+import os
 import urllib.parse
 
 import click
 import jwcrypto.jwk
 import jwcrypto.jwt
+import rdflib
+import requests
 from flask import Blueprint, current_app, url_for
 
 from solid import extensions, get_sample_client_registration
@@ -21,6 +24,7 @@ from trompasolid.authentication import (
 from trompasolid.backend import SolidBackend
 from trompasolid.backend.db_backend import DBBackend
 from trompasolid.backend.redis_backend import RedisBackend
+from trompasolid.client import get_bearer_for_user, set_backend
 from trompasolid.dpop import make_random_string
 
 cli_bp = Blueprint("cli", __name__)
@@ -212,7 +216,7 @@ def exchange_auth(code, state, provider, use_client_id_document):
 
     Provide a provider url, and the code and state that were returned in the redirect by the provider
     Some providers don't include themselves in the &iss= parameter of the callback url, so if it's not
-    available then we'll look it up in the state data.
+    available then you should store it in a client state at the previous step and retrieve it.
 
     This is the same code as `authentication_callback`, but copied here so that we can
     add additional debugging output when testing.
@@ -337,17 +341,19 @@ def refresh(profile, use_client_id_document):
     keypair = solid.load_key(backend.get_relying_party_keys())
     provider_info = backend.get_resource_server_configuration(provider)
 
-    base_url = current_app.config["BASE_URL"]
-    client_id, client_secret = get_client_id_and_secret_for_provider(
-        backend, provider, base_url, use_client_id_document
-    )
+    # Use the same authentication method as during initial token exchange
+    if use_client_id_document:
+        auth = None
+    else:
+        client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider)
+        auth = (client_id, client_secret)
 
     configuration_token = backend.get_configuration_token(provider, profile, client_id)
     if not configuration_token.has_expired():
         print("Configuration token has not expired, skipping refresh")
         return
 
-    status, resp = solid.refresh_auth_token(keypair, provider_info, client_id, configuration_token)
+    status, resp = solid.refresh_auth_token(keypair, provider_info, client_id, configuration_token, auth)
     print(f"{status=}")
     print(resp)
 
@@ -356,3 +362,165 @@ def refresh(profile, use_client_id_document):
         print("Token updated")
     else:
         print(f"Failure updating token: {status}")
+
+
+def get_uri_jsonld(uri, headers=None):
+    if not headers:
+        headers = {}
+    headers.update({"Accept": "application/ld+json"})
+    r = requests.get(uri, headers=headers)
+    r.raise_for_status()
+    logger.debug("Get json-ld from %s", uri)
+    logger.debug("json-ld headers: %s", r.headers)
+    logger.debug("json-ld content: %s", json.dumps(r.json(), indent=2))
+    return r.json(), r.headers
+
+
+def get_storage_from_profile_ttl(profile_uri):
+    graph = rdflib.Graph()
+    graph.parse(profile_uri)
+    storage = graph.value(
+        subject=rdflib.URIRef(profile_uri), predicate=rdflib.URIRef("http://www.w3.org/ns/pim/space#storage")
+    )
+    if storage is None:
+        print("No storage found")
+        return None
+    return storage.toPython()
+
+
+# File commands subcommand group
+@cli_bp.cli.group()
+def file():
+    """File-related commands"""
+    pass
+
+
+@file.command()
+@click.argument("profile")
+def get_profile(profile):
+    """Get a user's profile"""
+    profile_json, headers = get_uri_jsonld(profile)
+    print("Profile JSON:")
+    print(json.dumps(profile_json, indent=2))
+    print("Headers:", headers)
+
+
+@file.command()
+@click.argument("profile")
+def get_storage(profile):
+    """Get a user's storage"""
+    storage = get_storage_from_profile_ttl(profile)
+    print(f"storage: {storage}")
+
+
+@file.command()
+@click.argument("profile")
+@click.argument("directory")
+@click.argument("name")
+@click.argument("contents")
+@click.option("--use-client-id-document", is_flag=True, help="Use client ID document instead of dynamic registration")
+def add_file(profile, directory, name, contents, use_client_id_document):
+    """Add a file to a directory in the Solid pod"""
+    print(f"Adding file to directory: {directory}/{name}")
+    set_backend(get_backend())
+
+    base_url = current_app.config["BASE_URL"]
+    if use_client_id_document:
+        with current_app.test_request_context("/test"):
+            client_id_document_url = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
+    else:
+        client_id_document_url = None
+
+    provider = solid.lookup_provider_from_profile(profile)
+    if not provider:
+        print("Cannot find provider, quitting")
+        return
+    storage = get_storage_from_profile_ttl(profile)
+    if not storage:
+        print("Cannot find storage, quitting")
+        return
+
+    file_path = os.path.join(storage, os.path.normpath(os.path.join(directory, name)))
+    headers = get_bearer_for_user(provider, profile, file_path, "PUT", client_id_document_url)
+    headers.update({"Content-Type": "text/plain"})
+    print(f"Headers: {headers}")
+    print(f"File path: {file_path}")
+    print(f"Contents: {contents}")
+    r = requests.put(file_path, data=contents, headers=headers)
+    if r.status_code == 201:
+        print("Successfully created")
+    else:
+        print(f"Unexpected status code: {r.status_code}: {r.text}")
+
+
+@file.command()
+@click.argument("profile")
+@click.argument("directory")
+@click.argument("name")
+@click.option("--use-client-id-document", is_flag=True, help="Use client ID document instead of dynamic registration")
+def delete_file(profile, directory, name, use_client_id_document):
+    """Delete a file from a directory in the Solid pod"""
+    print(f"Deleting file: {directory}/{name}")
+
+    set_backend(get_backend())
+
+    base_url = current_app.config["BASE_URL"]
+    if use_client_id_document:
+        with current_app.test_request_context("/test"):
+            client_id_document_url = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
+    else:
+        client_id_document_url = None
+
+    provider = solid.lookup_provider_from_profile(profile)
+    if not provider:
+        print("Cannot find provider, quitting")
+        return
+    storage = get_storage_from_profile_ttl(profile)
+    if not storage:
+        print("Cannot find storage, quitting")
+        return
+
+    file_path = os.path.join(storage, os.path.normpath(os.path.join(directory, name)))
+    headers = get_bearer_for_user(provider, profile, file_path, "DELETE", client_id_document_url)
+    r = requests.delete(file_path, headers=headers)
+    if r.status_code == 205:
+        print("Successfully deleted")
+    else:
+        print(f"Unexpected status code: {r.status_code}: {r.text}")
+
+
+@file.command()
+@click.argument("profile")
+@click.argument("directory")
+@click.argument("name")
+@click.option("--use-client-id-document", is_flag=True, help="Use client ID document instead of dynamic registration")
+def get_file(profile, directory, name, use_client_id_document):
+    """Get information about a file in the Solid pod"""
+    print(f"Getting info for file: {directory}/{name}")
+
+    set_backend(get_backend())
+
+    base_url = current_app.config["BASE_URL"]
+    if use_client_id_document:
+        with current_app.test_request_context("/test"):
+            client_id_document_url = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
+    else:
+        client_id_document_url = None
+
+    provider = solid.lookup_provider_from_profile(profile)
+    if not provider:
+        print("Cannot find provider, quitting")
+        return
+    storage = get_storage_from_profile_ttl(profile)
+    if not storage:
+        print("Cannot find storage, quitting")
+        return
+
+    file_path = os.path.join(storage, os.path.normpath(os.path.join(directory, name)))
+    headers = get_bearer_for_user(provider, profile, file_path, "GET", client_id_document_url)
+    r = requests.get(file_path, headers=headers)
+    if r.status_code == 200:
+        print("Successfully got file")
+        print(r.text)
+    else:
+        print(f"Unexpected status code: {r.status_code}: {r.text}")
