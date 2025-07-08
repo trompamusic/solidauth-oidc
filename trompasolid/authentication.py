@@ -31,6 +31,12 @@ class IDTokenValidationError(Exception):
     pass
 
 
+class ClientIDDocumentRegistrationNotSupportedError(Exception):
+    """Raised when client ID document registration is not supported by the provider."""
+
+    pass
+
+
 def validate_id_token_claims(claims, expected_issuer, client_id, max_age=None, nonce=None):
     """
     Validate ID token claims according to OpenID Connect Core 1.0 specification.
@@ -188,6 +194,13 @@ def generate_authentication_url(
         )
 
     if client_id_document_url:
+        # Check if the provider supports client ID document registration
+        if not solid.op_supports_client_id_document_registration(provider_config):
+            raise ClientIDDocumentRegistrationNotSupportedError(
+                f"Provider {provider} does not support client ID document registration. "
+                f"The provider must support the 'webid' scope and either have no registration endpoint "
+                f"auth methods or support the 'none' auth method."
+            )
         client_id = client_id_document_url
         log_messages.append(f"Using a client id document: {client_id}")
         log_messages.append("Not performing dynamic registration, will use client_id as a URL")

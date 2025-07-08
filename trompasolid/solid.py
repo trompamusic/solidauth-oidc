@@ -109,6 +109,49 @@ def op_can_do_dynamic_registration(op_config):
     return "registration_endpoint" in op_config
 
 
+def op_supports_client_id_document_registration(op_config):
+    """
+    Check if a Solid Provider supports client ID document registration.
+
+    According to the Solid-OIDC specification, this is becoming the preferred way to identify a client:
+    https://solidproject.org/TR/oidc#clientids
+    > Solid applications SHOULD use a URI that can be dereferenced as a [Client ID Document](https://solidproject.org/TR/oidc#clientids-document).
+
+    The linked Github issue at https://github.com/solid/solid-oidc/issues/78 seems to indicate that the "token endpoint authentication" value of "none"
+    indicates that this is how to specify that a server can support it (https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication),
+    the field in the well-known RS configuration is "token_endpoint_auth_methods_supported".
+    However inrupt pod spaces (ESS) and trinpod do not report "none" in this endpoint but do allow authentication with a client id document.
+
+    Inrupt has some documentation about this: https://docs.inrupt.com/developer-tools/javascript/client-libraries/tutorial/authenticate-client/
+    > A Client ID can be:
+    > - a URL that dereferences to a [Client ID Document](https://solid.github.io/solid-oidc/#clientids-document).
+    > - a value that has been registered using either [OIDC dynamic or static registration](https://solid.github.io/solid-oidc/#clientids-oidc).
+
+    Looking through the source of inrupt solid-client-authn with the help of cursor, it seems that the library checks that
+    "scopes_supported" includes "webid".
+
+    This is reported in the solid-oidc spec as:
+    > An OpenID Provider that conforms to the Solid-OIDC specification MUST advertise it in the OpenID Connect Discovery 1.0 [OIDC.Discovery](https://solidproject.org/TR/oidc#biblio-oidcdiscovery) resource by including `webid` in its `scopes_supported` metadata property.
+
+    in Testing, only solidweb.org (NSS) didn't support a client id document, and in fact it doesn't include "webid" in the supported scopes.
+    It seems that if a provider app fully supports the solid spec then it will both include webid, and will support client id documents
+
+    Therefore we only test that the provider supports "webid" in its scopes_supported.
+
+    Args:
+        op_config: OpenID Provider configuration dictionary
+
+    Returns:
+        bool: True if client ID document registration is supported, False otherwise
+    """
+    # Check if the provider supports the 'webid' scope
+    scopes_supported = op_config.get("scopes_supported", [])
+    if "webid" not in scopes_supported:
+        return False
+
+    return True
+
+
 def dynamic_registration(registration_request, op_config):
     """Register an app with a provider"""
     if "registration_endpoint" not in op_config:
