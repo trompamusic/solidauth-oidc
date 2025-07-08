@@ -7,13 +7,18 @@ import jwcrypto.jwt
 
 
 def make_token_for(keypair, uri, method):
+    now = datetime.datetime.now()
+    # DPoP tokens should have a short lifetime (5-10 minutes)
+    exp_time = now + datetime.timedelta(minutes=10)
+
     jwt = jwcrypto.jwt.JWT(
         header={"typ": "dpop+jwt", "alg": "ES256", "jwk": keypair.export(private_key=False, as_dict=True)},
         claims={
             "jti": make_random_string(),
             "htm": method,
             "htu": uri,
-            "iat": int(datetime.datetime.now().timestamp()),
+            "iat": int(now.timestamp()),
+            "exp": int(exp_time.timestamp()),
         },
     )
     jwt.make_signed_token(keypair)

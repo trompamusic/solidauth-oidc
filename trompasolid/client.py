@@ -2,6 +2,7 @@ import jwcrypto.jwk
 import jwcrypto.jwt
 
 from trompasolid import solid
+from trompasolid.authentication import get_client_id_and_secret_for_provider
 from trompasolid.backend import SolidBackend
 from trompasolid.dpop import make_token_for
 
@@ -44,7 +45,15 @@ def get_bearer_for_user(provider, profile, url, method, client_id_document_url=N
         refresh_token = configuration_token.data["refresh_token"]
         keypair = solid.load_key(backend.get_relying_party_keys())
         provider_info = backend.get_resource_server_configuration(provider)
-        status, resp = solid.refresh_auth_token(keypair, provider_info, client_id, configuration_token)
+
+        if client_id_document_url is not None:
+            auth = None
+        else:
+            # TODO: This looks up registration data twice (above, and now)
+            client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider)
+            auth = (client_id, client_secret)
+
+        status, resp = solid.refresh_auth_token(keypair, provider_info, client_id, configuration_token, auth)
         if status:
             if "refresh_token" not in resp:
                 resp.update({"refresh_token": refresh_token})

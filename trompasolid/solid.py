@@ -224,7 +224,7 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
         return False, data
 
 
-def refresh_auth_token(keypair, provider_info, client_id, configuration_token):
+def refresh_auth_token(keypair, provider_info, client_id, configuration_token, auth=None):
     refresh_token = configuration_token.data["refresh_token"]
     resp = requests.post(
         url=provider_info["token_endpoint"],
@@ -234,6 +234,7 @@ def refresh_auth_token(keypair, provider_info, client_id, configuration_token):
             "client_id": client_id,
         },
         headers={"DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")},
+        auth=auth,
         allow_redirects=False,
         timeout=10,
     )
@@ -242,8 +243,9 @@ def refresh_auth_token(keypair, provider_info, client_id, configuration_token):
         result = resp.json()
         return True, result
     except requests.exceptions.HTTPError:
-        print("Error refreshing token:")
-        print(resp.text)
+        print(f"Error refreshing token: HTTP {resp.status_code}")
+        print(f"Response headers: {dict(resp.headers)}")
+        print(f"Response body: {resp.text}")
         try:
             data = resp.json()
         except ValueError:
