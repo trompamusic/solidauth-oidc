@@ -1,3 +1,5 @@
+import logging
+
 import jwcrypto.jwk
 import jwcrypto.jwt
 
@@ -7,6 +9,7 @@ from solidauth.backend import SolidBackend
 from solidauth.dpop import make_token_for
 
 backend: SolidBackend = None
+logger = logging.getLogger(__name__)
 
 
 def set_backend(backend_):
@@ -40,7 +43,7 @@ def get_bearer_for_user(provider, profile, url, method, client_id_document_url=N
     access_token = configuration_token.data["access_token"]
 
     if configuration_token.has_expired():
-        print(f"Token for {profile} has expired, refreshing")
+        logger.debug(f"Token for {profile} has expired, refreshing")
 
         refresh_token = configuration_token.data["refresh_token"]
         keypair = solid.load_key(backend.get_relying_party_keys())
@@ -59,9 +62,9 @@ def get_bearer_for_user(provider, profile, url, method, client_id_document_url=N
                 resp.update({"refresh_token": refresh_token})
             access_token = resp["access_token"]
             backend.update_configuration_token(provider, profile, client_id, resp)
-            print("... refreshed")
+            logger.debug("... refreshed")
         else:
-            print("... refresh failed")
+            logger.debug("... refresh failed")
 
     key = backend.get_relying_party_keys()
     private_key = jwcrypto.jwk.JWK.from_json(key)

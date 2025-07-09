@@ -45,7 +45,7 @@ def lookup_provider_from_profile(profile_url: str):
             return triples[0][2].toPython()
     except HTTPError as e:
         if e.status == 404:
-            print("Cannot find a profile at this url")
+            logger.debug("Cannot find a profile at this url")
         else:
             raise e
 
@@ -159,7 +159,7 @@ def dynamic_registration(registration_request, op_config):
 
     client = OicClient(client_authn_method=CLIENT_AUTHN_METHOD)
     registration_response = client.register(op_config["registration_endpoint"], **registration_request)
-    print("Registration response:", registration_response)
+    logger.debug("Registration response:", registration_response)
     return registration_response.to_dict()
 
 
@@ -243,9 +243,9 @@ def refresh_auth_token(keypair, provider_info, client_id, configuration_token, a
         result = resp.json()
         return True, result
     except requests.exceptions.HTTPError:
-        print(f"Error refreshing token: HTTP {resp.status_code}")
-        print(f"Response headers: {dict(resp.headers)}")
-        print(f"Response body: {resp.text}")
+        logger.debug(f"Error refreshing token: HTTP {resp.status_code}")
+        logger.debug(f"Response headers: {dict(resp.headers)}")
+        logger.debug(f"Response body: {resp.text}")
         try:
             data = resp.json()
         except ValueError:

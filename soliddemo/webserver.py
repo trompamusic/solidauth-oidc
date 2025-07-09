@@ -166,7 +166,6 @@ def web_register():
     base_url = current_app.config["BASE_URL"]
     if use_client_id_document:
         client_id_document_url = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
-        print(f"Client id document url: {client_id_document_url}")
     else:
         client_id_document_url = None
     try:

@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 
 import jwcrypto.jwk
@@ -7,6 +8,9 @@ import jwt
 
 from solidauth import solid
 from solidauth.dpop import make_random_string
+
+
+logger = logging.getLogger(__name__)
 
 
 class NoProviderError(Exception):
@@ -149,7 +153,7 @@ def get_jwt_kid(token):
         header = jwt.get_unverified_header(token)
         return header.get("kid")
     except jwt.DecodeError as e:
-        print(f"Error extracting kid from JWT: {e}")
+        logger.debug("Error extracting kid from JWT", exc_info=e)
         return None
 
 
@@ -168,13 +172,13 @@ def generate_authentication_url(
         raise NoProviderError(f"Cannot find a provider for webid {webid_or_provider}")
 
     log_messages.append(f"Provider for this user is: {provider}")
-    print(f"Provider for this user is: {provider}")
+    logger.debug(f"Provider for this user is: {provider}")
 
     provider_config = backend.get_resource_server_configuration(provider)
     provider_jwks = backend.get_resource_server_keys(provider)
     if provider_config and provider_jwks:
         log_messages.append(f"Configuration for {provider} already exists, skipping setup")
-        print(f"Configuration for {provider} already exists, skipping")
+        logger.debug(f"Configuration for {provider} already exists, skipping")
     else:
         provider_config = solid.get_openid_configuration(provider)
         # Get the canonical provider url from the openid configuration (e.g. https://solidcommunity.net vs https://solidcommunity.net/)
@@ -299,7 +303,7 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, c
             try:
                 validate_id_token_claims(claims, provider, client_id)
             except IDTokenValidationError as e:
-                print(f"ID token validation failed: {e}")
+                logger.debug("ID token validation failed", exc_info=e)
                 return False, {"error": "invalid_token", "error_description": str(e)}
 
             if "webid" in claims:
@@ -316,7 +320,7 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, c
             return True, resp
 
         except ValueError as e:
-            print(f"Error selecting JWK: {e}")
+            logger.debug("Error selecting JWK", exc_info=e)
             return False, {"error": "invalid_token", "error_description": str(e)}
         except (
             jwcrypto.jwt.JWTExpiredError,
@@ -330,8 +334,8 @@ def authentication_callback(backend, auth_code, state, provider, redirect_uri, c
             # JWTInvalidClaimError: Invalid claims
             # ValueError: Invalid JWT format
             # TypeError: Invalid key type
-            print(f"Error validating ID token: {e}")
+            logger.debug("Error validating ID token", exc_info=e)
             return False, {"error": "invalid_token", "error_description": str(e)}
     else:
-        print("Error when validating auth callback")
+        logger.debug("Error when validating auth callback")
         return False, resp
