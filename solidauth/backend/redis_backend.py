@@ -87,8 +87,8 @@ class RedisBackend(SolidBackend):
 
         return result
 
-    def get_configuration_token(self, issuer, profile, client_id):
-        return self.get_redis_str(make_redis_key(CONFIG_TOKENS, issuer, profile, client_id))
+    def get_configuration_token(self, issuer, profile, use_client_id_document):
+        return self.get_redis_str(make_redis_key(CONFIG_TOKENS, issuer, profile, use_client_id_document))
 
     def update_configuration_token(self, issuer, profile, client_id, token):
         return self.store_redis_str(make_redis_key(CONFIG_TOKENS, issuer, profile, client_id), token)

@@ -10,22 +10,13 @@ import rdflib
 import requests
 from flask import Blueprint, current_app, url_for
 
-from soliddemo import extensions, get_sample_client_registration
-from soliddemo.webserver import CLIENT_ID_DOCUMENT_SUFFIX
-from solidauth import solid
-from solidauth.authentication import (
-    ClientDoesNotSupportDynamicRegistration,
-    IDTokenValidationError,
-    get_client_id_and_secret_for_provider,
-    get_jwt_kid,
-    select_jwk_by_kid,
-    validate_id_token_claims,
-)
+from solidauth import client, solid
 from solidauth.backend import SolidBackend
 from solidauth.backend.db_backend import DBBackend
 from solidauth.backend.redis_backend import RedisBackend
-from solidauth.client import get_bearer_for_user, set_backend
 from solidauth.dpop import make_random_string
+from soliddemo import extensions, get_sample_client_registration
+from soliddemo.webserver import CLIENT_ID_DOCUMENT_SUFFIX
 
 cli_bp = Blueprint("cli", __name__)
 logger = logging.getLogger(__name__)
@@ -131,7 +122,7 @@ def register(provider, use_client_id_document):
     if not solid.op_can_do_dynamic_registration(provider_config):
         # Provider doesn't support dynamic registration - while solid allows us to use a
         # manually created client ("static registration"), we don't want to deal with this
-        raise ClientDoesNotSupportDynamicRegistration(
+        raise client.ClientDoesNotSupportDynamicRegistration(
             f"Provider {provider} does not support dynamic client registration. "
             f"Registration endpoint: {provider_config.get('registration_endpoint', 'not available')}"
         )
@@ -224,11 +215,12 @@ def exchange_auth(code, state, provider, use_client_id_document):
 
     backend = get_backend()
     redirect_uri = current_app.config["REDIRECT_URL"]
+    c = client.SolidClient(backend, use_client_id_document)
 
     if use_client_id_document:
         auth = None
     else:
-        client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider)
+        client_id, client_secret = c.get_client_id_and_secret_for_provider(provider)
         auth = (client_id, client_secret)
 
     backend_state = backend.get_state_data(state)
@@ -251,11 +243,11 @@ def exchange_auth(code, state, provider, use_client_id_document):
         server_jwks = backend.get_resource_server_keys(provider)
 
         # Extract the key ID from the JWT header
-        kid = get_jwt_kid(id_token)
+        kid = solid.get_jwt_kid(id_token)
 
         try:
             # Select the correct key based on the kid
-            key = select_jwk_by_kid(server_jwks, kid)
+            key = solid.select_jwk_by_kid(server_jwks, kid)
 
             # Validate and decode the ID token
             decoded_id_token = jwcrypto.jwt.JWT()
@@ -265,8 +257,8 @@ def exchange_auth(code, state, provider, use_client_id_document):
 
             # Validate ID token claims according to OpenID Connect Core 1.0
             try:
-                validate_id_token_claims(claims, provider, client_id)
-            except IDTokenValidationError as e:
+                solid.validate_id_token_claims(claims, provider, client_id)
+            except solid.IDTokenValidationError as e:
                 print(f"ID token validation failed: {e}")
                 return False, {"error": "invalid_token", "error_description": str(e)}
 
@@ -338,6 +330,7 @@ def refresh(profile, use_client_id_document):
     provider = solid.lookup_provider_from_profile(profile)
     backend = get_backend()
 
+    c = client.SolidClient(backend, use_client_id_document)
     keypair = solid.load_key(backend.get_relying_party_keys())
     provider_info = backend.get_resource_server_configuration(provider)
 
@@ -345,10 +338,10 @@ def refresh(profile, use_client_id_document):
     if use_client_id_document:
         auth = None
     else:
-        client_id, client_secret = get_client_id_and_secret_for_provider(backend, provider)
+        client_id, client_secret = c.get_client_id_and_secret_for_provider(provider)
         auth = (client_id, client_secret)
 
-    configuration_token = backend.get_configuration_token(provider, profile, client_id)
+    configuration_token = c.get_configuration_token(provider, profile, client_id)
     if not configuration_token.has_expired():
         print("Configuration token has not expired, skipping refresh")
         return
@@ -422,14 +415,7 @@ def get_storage(profile):
 def add_file(profile, directory, name, contents, use_client_id_document):
     """Add a file to a directory in the Solid pod"""
     print(f"Adding file to directory: {directory}/{name}")
-    set_backend(get_backend())
-
-    base_url = current_app.config["BASE_URL"]
-    if use_client_id_document:
-        with current_app.test_request_context("/test"):
-            client_id_document_url = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
-    else:
-        client_id_document_url = None
+    c = client.SolidClient(get_backend(), use_client_id_document)
 
     provider = solid.lookup_provider_from_profile(profile)
     if not provider:
@@ -441,7 +427,7 @@ def add_file(profile, directory, name, contents, use_client_id_document):
         return
 
     file_path = os.path.join(storage, os.path.normpath(os.path.join(directory, name)))
-    headers = get_bearer_for_user(provider, profile, file_path, "PUT", client_id_document_url)
+    headers = c.get_bearer_for_user(provider, profile, file_path, "PUT")
     headers.update({"Content-Type": "text/plain"})
     print(f"Headers: {headers}")
     print(f"File path: {file_path}")
@@ -462,14 +448,7 @@ def delete_file(profile, directory, name, use_client_id_document):
     """Delete a file from a directory in the Solid pod"""
     print(f"Deleting file: {directory}/{name}")
 
-    set_backend(get_backend())
-
-    base_url = current_app.config["BASE_URL"]
-    if use_client_id_document:
-        with current_app.test_request_context("/test"):
-            client_id_document_url = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
-    else:
-        client_id_document_url = None
+    c = client.SolidClient(get_backend(), use_client_id_document)
 
     provider = solid.lookup_provider_from_profile(profile)
     if not provider:
@@ -481,7 +460,7 @@ def delete_file(profile, directory, name, use_client_id_document):
         return
 
     file_path = os.path.join(storage, os.path.normpath(os.path.join(directory, name)))
-    headers = get_bearer_for_user(provider, profile, file_path, "DELETE", client_id_document_url)
+    headers = c.get_bearer_for_user(provider, profile, file_path, "DELETE")
     r = requests.delete(file_path, headers=headers)
     if r.status_code == 205:
         print("Successfully deleted")
@@ -498,14 +477,7 @@ def get_file(profile, directory, name, use_client_id_document):
     """Get information about a file in the Solid pod"""
     print(f"Getting info for file: {directory}/{name}")
 
-    set_backend(get_backend())
-
-    base_url = current_app.config["BASE_URL"]
-    if use_client_id_document:
-        with current_app.test_request_context("/test"):
-            client_id_document_url = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
-    else:
-        client_id_document_url = None
+    c = client.SolidClient(get_backend(), use_client_id_document)
 
     provider = solid.lookup_provider_from_profile(profile)
     if not provider:
@@ -517,7 +489,7 @@ def get_file(profile, directory, name, use_client_id_document):
         return
 
     file_path = os.path.join(storage, os.path.normpath(os.path.join(directory, name)))
-    headers = get_bearer_for_user(provider, profile, file_path, "GET", client_id_document_url)
+    headers = c.get_bearer_for_user(provider, profile, file_path, "GET")
     r = requests.get(file_path, headers=headers)
     if r.status_code == 200:
         print("Successfully got file")

@@ -101,12 +101,20 @@ class DBBackend(SolidBackend):
             self.session.add(ct)
             self.session.commit()
 
-    def get_configuration_token(self, issuer, profile, client_id):
-        ct = (
-            self.session.query(db.ConfigurationToken)
-            .filter_by(issuer=issuer, profile=profile, client_id=client_id)
-            .first()
+    def get_configuration_token(self, issuer, profile, use_client_id_document):
+        """Get the Configuration Token (auth token) for a given issuer and profile.
+        There could be two Configuration Tokens for a single user:
+          - One with the client id created by dynamic registration (linked in the client_registration_id FK)
+          - One with the client id set to a client id document (a URL)
+        It's only possible to have a maximum of two Configuration Tokens for a issuer/profile combination, either
+        related to a single ClientRegistration, or a single client id.
+        """
+        ct = self.session.query(db.ConfigurationToken).where(
+            db.ConfigurationToken.issuer == issuer, db.ConfigurationToken.profile == profile
         )
+        if use_client_id_document:
+            ct = ct.where(db.ConfigurationToken.client_registration_id.is_(None))
+        ct = ct.first()
 
         if ct:
             return model.ConfigurationToken(

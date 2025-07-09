@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from solidauth import model
 
 
 class SolidBackend(ABC):
@@ -47,7 +48,7 @@ class SolidBackend(ABC):
         pass
 
     @abstractmethod
-    def get_configuration_token(self, issuer, profile, client_id):
+    def get_configuration_token(self, issuer, profile, use_client_id_document) -> model.ConfigurationToken:
         pass
 
     @abstractmethod

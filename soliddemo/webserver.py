@@ -9,12 +9,7 @@ import solidauth.solid
 from soliddemo import db, extensions, get_sample_client_registration
 from soliddemo.admin import init_admin
 from soliddemo.auth import LoginForm, is_safe_url
-from solidauth.authentication import (
-    BadClientIdError,
-    NoProviderError,
-    authentication_callback,
-    generate_authentication_url,
-)
+from solidauth import client
 from solidauth.backend import SolidBackend
 from solidauth.backend.db_backend import DBBackend
 from solidauth.backend.redis_backend import RedisBackend
@@ -171,7 +166,8 @@ def web_register():
     try:
         registration_request = get_sample_client_registration(base_url, [redirect_url])
         registration_request["client_name"] = "Solid-OIDC client id document app (dynamic registration)"
-        data = generate_authentication_url(backend, webid, registration_request, redirect_url, client_id_document_url)
+        c = client.SolidClient(backend, use_client_id_document)
+        data = c.generate_authentication_url(webid, registration_request, redirect_url, client_id_document_url)
         provider = data["provider"]
         auth_url = data["auth_url"]
         log_messages = data["log_messages"]
@@ -181,7 +177,7 @@ def web_register():
 
         return flask.render_template("register.html", log_messages=log_messages, auth_url=auth_url)
 
-    except NoProviderError as e:
+    except client.NoProviderError as e:
         return flask.render_template("register.html", log_messages=[str(e)])
 
 
@@ -207,10 +203,9 @@ def web_redirect():
         client_id_document_url = None
 
     try:
-        success, data = authentication_callback(
-            backend, auth_code, state, provider, redirect_uri, client_id_document_url
-        )
-    except BadClientIdError as e:
+        cl = client.SolidClient(backend, use_client_id_document)
+        success, data = cl.authentication_callback(auth_code, state, provider, redirect_uri, client_id_document_url)
+    except client.BadClientIdError as e:
         error_message = f"Client registration error: {str(e)}"
         return flask.render_template("error.html", error_message=error_message)
 

@@ -94,11 +94,14 @@ from solidauth.backend.redis_backend import RedisBackend
 from solidauth.db import Base
 from solidauth import client
 
-client.set_backend(DBBackend(db.session))
-client.set_backend(RedisBackend(redis_client))
+backend = DBBackend(db.session)
+# or
+backend = RedisBackend(redis_client)
 
 # Create the database tables if you use the DBBackend
 Base.metadata.create_all(db.engine)
+
+sc = client.SolidClient(backend, use_client_id_document=True)
 ```
 
 ## Workflow
@@ -108,18 +111,16 @@ A user will come with a web-id (which is a URL). By looking up the URL you can i
 webid is registered.
 
 ### 1.
-Use `solidauth.authentication.generate_authentication_url` to get some information about the provider, (optionally) register
+Use `SolidClient.generate_authentication_url` to get some information about the provider, (optionally) register
 a client with it, and get a URL to sent the user to to complete the authentication request
 
 ```py
 def generate_authentication_url(
-    backend, webid_or_provider, registration_request, redirect_url, client_id_document_url=None
+    self, webid_or_provider, registration_request, redirect_url, client_id_document_url=None
 ):
 ```
 
 Arguments:
-
-   - `backend`: A backend to use
    - `webid_or_provider`: The webid of the user who wants to authenticate
    - `registration_request`: If you want to perform dynamic registration (client_id_document_url is None), the contents of the registration request
    - `redirect_url`: Where you want the provider to redirect you to after the user gives you permission. This must be a URL present in the client document/registration request
@@ -142,30 +143,27 @@ The method will save a PKCE state and code in the backend and return the URL tha
 
 
 ### 2.
-At the redirect url, use `solidauth.authentication.generate_authentication_url` to perform PKCE validation and key exchange
+At the redirect url, use `SolidClient.generate_authentication_url` to perform PKCE validation and key exchange
 
 ```py
 def authentication_callback(
-    backend, auth_code, state, provider, redirect_uri, base_url, always_use_client_id_document=False
+    self, auth_code, state, provider, redirect_uri, base_url
 ):
 ```
 
 Arguments:
-  - `backend`: A backend to use
   - `auth_code`: The PKCE `code` GET parameter returned in the callback URL
   - `state`: The PKCE `state` GET parameter returned in the callback URL
   - `provider`: The provider that you were redirected from. Some providers pass this in the `iss` GET parameter,
     but if not then you should store it in a client state at the previous step and retrieve it.
   - `redirect_uri`: The URL of this endpoint
-  - `client_id_document_url`: As above
 
 ### 3.
 
-To make an authenticated request as this user, use `solidauth.client.get_bearer_for_user` to get the headers needed for this request
-Make sure you use `client.set_backend` first (yes, this is inconsistent with the `solidauth.authentication` package)
+To make an authenticated request as this user, use `SolidClient.get_bearer_for_user` to get the headers needed for this request
 
 ```py
-def get_bearer_for_user(provider, profile, url, method, client_id_document_url=None):
+def get_bearer_for_user(self, provider, profile, url, method):
 ```
 
 Arguments:
@@ -173,15 +171,12 @@ Arguments:
   - `profile`: The web id of the user making the request
   - `url`: The URL of the request
   - `method`: The HTTP method of the request
-  - `client_id_document`: Set to a client id document if using this, otherwise set to `None` to use the client for this provider which
-    was created with dynamic registration.
 
 ```py
     provider = "https://solidcommunity.net/"
     profile = "https://username.solidcommunity.net/profile/card#me"
     container = "https://username.solidcommunity.net/location/"
-    client_id_document = "https://example.com/solid-client.jsonld"
-    headers = get_bearer_for_user(provider, profile, container, "OPTIONS", client_id_document_url)
+    headers = cl.get_bearer_for_user(provider, profile, container, "OPTIONS")
     r = requests.options(container, headers=headers)
 ```
 

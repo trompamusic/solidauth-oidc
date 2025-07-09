@@ -1,11 +1,14 @@
 import base64
 import hashlib
+import json
 import logging
+import time
 import urllib.parse
 from urllib.error import HTTPError
 
 import jwcrypto.jwk
 import jwcrypto.jwt
+import jwt
 import rdflib
 import requests
 import requests.utils
@@ -15,6 +18,12 @@ from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 from solidauth.dpop import make_random_string, make_token_for
 
 logger = logging.getLogger(__name__)
+
+
+class IDTokenValidationError(Exception):
+    """Raised when ID token validation fails."""
+
+    pass
 
 
 def lookup_provider_from_profile(profile_url: str):
@@ -107,6 +116,122 @@ def load_key(keydata):
 
 def op_can_do_dynamic_registration(op_config):
     return "registration_endpoint" in op_config
+
+
+def validate_id_token_claims(claims, expected_issuer, client_id, max_age=None, nonce=None):
+    """
+    Validate ID token claims according to OpenID Connect Core 1.0 specification.
+
+    Args:
+        claims: JWT claims dictionary
+        expected_issuer: Expected issuer (OP) URL
+        client_id: Our client ID
+        max_age: Maximum age of token in seconds (optional)
+        nonce: Expected nonce value (optional)
+
+    Raises:
+        IDTokenValidationError: If any validation fails
+    """
+    # Validate issuer
+    if claims.get("iss") != expected_issuer:
+        raise IDTokenValidationError(f"Invalid issuer: expected {expected_issuer}, got {claims.get('iss')}")
+
+    # Validate audience
+    aud = claims.get("aud")
+    if not aud:
+        raise IDTokenValidationError("Missing 'aud' claim")
+
+    # aud can be a string or list of strings
+    if isinstance(aud, str):
+        if aud != client_id:
+            raise IDTokenValidationError(f"Invalid audience: expected {client_id}, got {aud}")
+    elif isinstance(aud, list):
+        if client_id not in aud:
+            raise IDTokenValidationError(f"Client ID {client_id} not in audience list {aud}")
+    else:
+        raise IDTokenValidationError(f"Invalid 'aud' claim type: {type(aud)}")
+
+    # Validate expiration time
+    exp = claims.get("exp")
+    if not exp:
+        raise IDTokenValidationError("Missing 'exp' claim")
+
+    current_time = int(time.time())
+    if exp < current_time:
+        raise IDTokenValidationError(f"Token has expired: exp={exp}, current_time={current_time}")
+
+    # Validate issued at time
+    iat = claims.get("iat")
+    if not iat:
+        raise IDTokenValidationError("Missing 'iat' claim")
+
+    # iat should not be in the future (with small tolerance for clock skew)
+    clock_skew = 300  # 5 minutes tolerance
+    if iat > current_time + clock_skew:
+        raise IDTokenValidationError(f"Token issued in the future: iat={iat}, current_time={current_time}")
+
+    # Validate max_age if specified
+    if max_age is not None:
+        auth_time = claims.get("auth_time")
+        if not auth_time:
+            raise IDTokenValidationError("max_age specified but 'auth_time' claim missing")
+
+        if auth_time + max_age < current_time:
+            raise IDTokenValidationError(f"Token too old: auth_time={auth_time}, max_age={max_age}")
+
+    # Validate nonce if specified
+    if nonce is not None:
+        token_nonce = claims.get("nonce")
+        if not token_nonce:
+            raise IDTokenValidationError("nonce expected but missing from token")
+        if token_nonce != nonce:
+            raise IDTokenValidationError(f"Invalid nonce: expected {nonce}, got {token_nonce}")
+
+
+def select_jwk_by_kid(jwks, kid):
+    """
+    Select the correct JWK from a JWKS based on the key ID (kid).
+
+    Args:
+        jwks: JSON Web Key Set containing multiple keys
+        kid: Key ID to match
+
+    Returns:
+        JWK object for the matching key
+
+    Raises:
+        ValueError: If no key with the specified kid is found
+    """
+    if "keys" not in jwks:
+        raise ValueError("Invalid JWKS format: missing 'keys' field")
+
+    for key_data in jwks["keys"]:
+        if key_data.get("kid") == kid:
+            return jwcrypto.jwk.JWK.from_json(json.dumps(key_data))
+
+    # If no kid is specified in the JWT header, try the first key (fallback)
+    if kid is None and jwks["keys"]:
+        return jwcrypto.jwk.JWK.from_json(json.dumps(jwks["keys"][0]))
+
+    raise ValueError(f"No key found with kid: {kid}")
+
+
+def get_jwt_kid(token):
+    """
+    Extract the key ID (kid) from a JWT header without validating the signature.
+
+    Args:
+        token: JWT token string
+
+    Returns:
+        Key ID from the JWT header, or None if not present
+    """
+    try:
+        header = jwt.get_unverified_header(token)
+        return header.get("kid")
+    except jwt.DecodeError as e:
+        logger.debug("Error extracting kid from JWT", exc_info=e)
+        return None
 
 
 def op_supports_client_id_document_registration(op_config):
