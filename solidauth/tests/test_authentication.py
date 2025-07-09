@@ -1,7 +1,3 @@
-"""
-Tests for authentication functionality in the trompasolid package.
-"""
-
 import time
 from unittest.mock import Mock, patch
 
@@ -9,8 +5,7 @@ import jwcrypto.jwk
 import jwcrypto.jwt
 import pytest
 
-from trompasolid import solid
-from trompasolid.authentication import (
+from solidauth.authentication import (
     IDTokenValidationError,
     authentication_callback,
     get_jwt_kid,
@@ -307,52 +302,50 @@ class TestJWTKeySelectionIntegration:
 class TestClientIDDocumentRegistration:
     """Test cases for client ID document registration checking."""
 
-    def test_op_supports_client_id_document_registration_with_no_auth_methods(self):
-        """Test that OP supports client ID document registration when no auth methods specified."""
-        op_config = {
-            "registration_endpoint": "https://example.com/register",
-            "registration_endpoint_auth_methods_supported": [],
-        }
-        assert solid.op_supports_client_id_document_registration(op_config) is True
+    def test_generate_authentication_url_raises_error_when_client_id_document_not_supported(self):
+        """Test that generate_authentication_url raises error when client ID document registration is not supported."""
+        from solidauth.authentication import (
+            ClientIDDocumentRegistrationNotSupportedError,
+            generate_authentication_url,
+        )
 
-    def test_op_supports_client_id_document_registration_with_none_auth_method(self):
-        """Test that OP supports client ID document registration when 'none' auth method is supported."""
-        op_config = {
-            "registration_endpoint": "https://example.com/register",
-            "registration_endpoint_auth_methods_supported": ["none", "client_secret_basic"],
-        }
-        assert solid.op_supports_client_id_document_registration(op_config) is True
+        backend = Mock()
+        backend.get_resource_server_configuration.return_value = dict(
+            issuer="https://issuer.example",
+            authorization_endpoint="https://issuer.example/auth",
+            token_endpoint="https://issuer.example/token",
+            registration_endpoint="https://issuer.example/register",
+            scopes_supported=["openid", "offline_access"],
+            registration_endpoint_auth_methods_supported=["client_secret_basic"],
+        )
+        backend.get_resource_server_keys.return_value = dict(keys=[])
+        backend.get_client_registration.return_value = None
+        backend.get_state_data.return_value = None
+        backend.set_state_data = Mock()
+        backend.save_resource_server_configuration = Mock()
+        backend.save_resource_server_keys = Mock()
 
-    def test_op_does_not_support_client_id_document_registration_with_auth_methods(self):
-        """Test that OP does not support client ID document registration when auth methods are required."""
-        op_config = {
-            "registration_endpoint": "https://example.com/register",
-            "registration_endpoint_auth_methods_supported": ["client_secret_basic", "private_key_jwt"],
-        }
-        assert solid.op_supports_client_id_document_registration(op_config) is False
-
-    def test_op_does_not_support_client_id_document_registration_no_endpoint(self):
-        """Test that OP does not support client ID document registration when no registration endpoint."""
-        op_config = {
-            "authorization_endpoint": "https://example.com/authorize",
-            "token_endpoint": "https://example.com/token",
-        }
-        assert solid.op_supports_client_id_document_registration(op_config) is False
-
-    def test_op_does_not_support_client_id_document_registration_missing_auth_methods_field(self):
-        """Test that OP supports client ID document registration when auth methods field is missing."""
-        op_config = {"registration_endpoint": "https://example.com/register"}
-        assert solid.op_supports_client_id_document_registration(op_config) is True
+        with pytest.raises(
+            ClientIDDocumentRegistrationNotSupportedError, match="does not support client ID document registration"
+        ):
+            generate_authentication_url(
+                backend,
+                "https://issuer.example",
+                "test_client",
+                "https://redirect.example",
+                "https://base.example",
+                always_use_client_id_document=True,
+            )
 
 
 class TestStateParameterSecurity:
     """Test that state parameter is deleted after use in authentication_callback."""
 
-    @patch("trompasolid.authentication.get_jwt_kid", return_value="kid1")
-    @patch("trompasolid.authentication.select_jwk_by_kid")
-    @patch("trompasolid.authentication.jwcrypto.jwt.JWT")
-    @patch("trompasolid.authentication.validate_id_token_claims")
-    @patch("trompasolid.authentication.solid")
+    @patch("solidauth.authentication.get_jwt_kid", return_value="kid1")
+    @patch("solidauth.authentication.select_jwk_by_kid")
+    @patch("solidauth.authentication.jwcrypto.jwt.JWT")
+    @patch("solidauth.authentication.validate_id_token_claims")
+    @patch("solidauth.authentication.solid")
     def test_state_deleted_after_callback_success(
         self, mock_solid, mock_validate, mock_jwt, mock_select_jwk, mock_get_kid
     ):
@@ -374,11 +367,11 @@ class TestStateParameterSecurity:
 
         backend.delete_state_data.assert_called_once_with("state123")
 
-    @patch("trompasolid.authentication.get_jwt_kid", return_value="kid1")
-    @patch("trompasolid.authentication.select_jwk_by_kid")
-    @patch("trompasolid.authentication.jwcrypto.jwt.JWT")
-    @patch("trompasolid.authentication.validate_id_token_claims", side_effect=IDTokenValidationError("fail"))
-    @patch("trompasolid.authentication.solid")
+    @patch("solidauth.authentication.get_jwt_kid", return_value="kid1")
+    @patch("solidauth.authentication.select_jwk_by_kid")
+    @patch("solidauth.authentication.jwcrypto.jwt.JWT")
+    @patch("solidauth.authentication.validate_id_token_claims", side_effect=IDTokenValidationError("fail"))
+    @patch("solidauth.authentication.solid")
     def test_state_deleted_after_callback_failure(
         self, mock_solid, mock_validate, mock_jwt, mock_select_jwk, mock_get_kid
     ):

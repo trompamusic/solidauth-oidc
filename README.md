@@ -85,14 +85,14 @@ We have a set of commandline tools to perform the steps needed to perform an aut
 # Using the library in other projects
 You can use this library from another application.
 
-The main interfaces are in the `trompasolid` package.
+The main interfaces are in the `solidauth` package.
 You need to decide if you want to use the redis or the db backend:
 
 ```py
-from trompasolid.backend.db_backend import DBBackend
-from trompasolid.backend.redis_backend import RedisBackend
-from trompasolid.db import Base
-from trompasolid import client
+from solidauth.backend.db_backend import DBBackend
+from solidauth.backend.redis_backend import RedisBackend
+from solidauth.db import Base
+from solidauth import client
 
 client.set_backend(DBBackend(db.session))
 client.set_backend(RedisBackend(redis_client))
@@ -108,7 +108,7 @@ A user will come with a web-id (which is a URL). By looking up the URL you can i
 webid is registered.
 
 ### 1.
-Use `trompasolid.authentication.generate_authentication_url` to get some information about the provider, (optionally) register
+Use `solidauth.authentication.generate_authentication_url` to get some information about the provider, (optionally) register
 a client with it, and get a URL to sent the user to to complete the authentication request
 
 ```py
@@ -142,7 +142,7 @@ The method will save a PKCE state and code in the backend and return the URL tha
 
 
 ### 2.
-At the redirect url, use `trompasolid.authentication.generate_authentication_url` to perform PKCE validation and key exchange
+At the redirect url, use `solidauth.authentication.generate_authentication_url` to perform PKCE validation and key exchange
 
 ```py
 def authentication_callback(
@@ -161,8 +161,8 @@ Arguments:
 
 ### 3.
 
-To make an authenticated request as this user, use `trompasolid.client.get_bearer_for_user` to get the headers needed for this request
-Make sure you use `client.set_backend` first (yes, this is inconsistent with the `trompasolid.authentication` package)
+To make an authenticated request as this user, use `solidauth.client.get_bearer_for_user` to get the headers needed for this request
+Make sure you use `client.set_backend` first (yes, this is inconsistent with the `solidauth.authentication` package)
 
 ```py
 def get_bearer_for_user(provider, profile, url, method, client_id_document_url=None):

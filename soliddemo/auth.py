@@ -3,7 +3,7 @@ from flask import request
 import flask_wtf
 import wtforms
 
-from solid.db import User
+from soliddemo.db import User
 
 
 # From https://web.archive.org/web/20120517003641/http://flask.pocoo.org/snippets/62/

@@ -2,7 +2,7 @@ import datetime
 
 from flask_login import UserMixin
 
-from solid.extensions import bcrypt, db
+from soliddemo.extensions import bcrypt, db
 
 
 class User(db.Model, UserMixin):

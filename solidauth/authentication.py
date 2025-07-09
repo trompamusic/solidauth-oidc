@@ -5,8 +5,8 @@ import jwcrypto.jwk
 import jwcrypto.jwt
 import jwt
 
-from trompasolid import solid
-from trompasolid.dpop import make_random_string
+from solidauth import solid
+from solidauth.dpop import make_random_string
 
 
 class NoProviderError(Exception):

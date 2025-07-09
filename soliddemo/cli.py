@@ -10,10 +10,10 @@ import rdflib
 import requests
 from flask import Blueprint, current_app, url_for
 
-from solid import extensions, get_sample_client_registration
-from solid.webserver import CLIENT_ID_DOCUMENT_SUFFIX
-from trompasolid import solid
-from trompasolid.authentication import (
+from soliddemo import extensions, get_sample_client_registration
+from soliddemo.webserver import CLIENT_ID_DOCUMENT_SUFFIX
+from solidauth import solid
+from solidauth.authentication import (
     ClientDoesNotSupportDynamicRegistration,
     IDTokenValidationError,
     get_client_id_and_secret_for_provider,
@@ -21,11 +21,11 @@ from trompasolid.authentication import (
     select_jwk_by_kid,
     validate_id_token_claims,
 )
-from trompasolid.backend import SolidBackend
-from trompasolid.backend.db_backend import DBBackend
-from trompasolid.backend.redis_backend import RedisBackend
-from trompasolid.client import get_bearer_for_user, set_backend
-from trompasolid.dpop import make_random_string
+from solidauth.backend import SolidBackend
+from solidauth.backend.db_backend import DBBackend
+from solidauth.backend.redis_backend import RedisBackend
+from solidauth.client import get_bearer_for_user, set_backend
+from solidauth.dpop import make_random_string
 
 cli_bp = Blueprint("cli", __name__)
 logger = logging.getLogger(__name__)
@@ -113,7 +113,7 @@ def register(provider, use_client_id_document):
     """Step 3, Register with the OP.
     Pass in the provider url from `get-provider-configuration` or `get-provider-configuration-from-profile`
 
-    This method is similar to `trompasolid.authentication.generate_authentication_url`, but copied here so that we can
+    This method is similar to `solidauth.authentication.generate_authentication_url`, but copied here so that we can
     add additional debugging output when testing.
     """
 

@@ -2,8 +2,8 @@ import datetime
 
 import sqlalchemy.exc
 
-from trompasolid import db, model
-from trompasolid.backend import SolidBackend
+from solidauth import db, model
+from solidauth.backend import SolidBackend
 
 
 class DBBackend(SolidBackend):

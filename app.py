@@ -2,11 +2,11 @@ from getpass import getpass
 
 from flask.cli import with_appcontext
 
-from solid.cli import cli_bp
-from solid.db import User
-from solid.extensions import db
-from solid.webserver import webserver_bp, create_app
-from trompasolid.db import Base
+from soliddemo.cli import cli_bp
+from soliddemo.db import User
+from soliddemo.extensions import db
+from soliddemo.webserver import webserver_bp, create_app
+from solidauth.db import Base
 
 app = create_app()
 

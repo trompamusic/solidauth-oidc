@@ -1,10 +1,10 @@
 import jwcrypto.jwk
 import jwcrypto.jwt
 
-from trompasolid import solid
-from trompasolid.authentication import get_client_id_and_secret_for_provider
-from trompasolid.backend import SolidBackend
-from trompasolid.dpop import make_token_for
+from solidauth import solid
+from solidauth.authentication import get_client_id_and_secret_for_provider
+from solidauth.backend import SolidBackend
+from solidauth.dpop import make_token_for
 
 backend: SolidBackend = None
 

@@ -3,9 +3,9 @@ from flask_admin import BaseView, AdminIndexView
 from flask_login import current_user
 from flask_admin.contrib.sqla import ModelView
 
-from solid import extensions
+from soliddemo import extensions
 
-import trompasolid.db
+import solidauth.db
 
 
 class AuthBaseView(BaseView):
@@ -30,11 +30,11 @@ class ClientRegistrationModelView(AuthModelView):
 
 
 def init_admin():
-    import solid.db
+    import soliddemo.db
 
-    extensions.admin.add_view(AuthModelView(solid.db.User, extensions.db.session))
-    extensions.admin.add_view(ClientRegistrationModelView(trompasolid.db.ClientRegistration, extensions.db.session))
-    extensions.admin.add_view(AuthModelView(trompasolid.db.ConfigurationToken, extensions.db.session))
-    extensions.admin.add_view(AuthModelView(trompasolid.db.RelyingPartyKey, extensions.db.session))
-    extensions.admin.add_view(AuthModelView(trompasolid.db.ResourceServerKeys, extensions.db.session))
-    extensions.admin.add_view(AuthModelView(trompasolid.db.ResourceServerConfiguration, extensions.db.session))
+    extensions.admin.add_view(AuthModelView(soliddemo.db.User, extensions.db.session))
+    extensions.admin.add_view(ClientRegistrationModelView(solidauth.db.ClientRegistration, extensions.db.session))
+    extensions.admin.add_view(AuthModelView(solidauth.db.ConfigurationToken, extensions.db.session))
+    extensions.admin.add_view(AuthModelView(solidauth.db.RelyingPartyKey, extensions.db.session))
+    extensions.admin.add_view(AuthModelView(solidauth.db.ResourceServerKeys, extensions.db.session))
+    extensions.admin.add_view(AuthModelView(solidauth.db.ResourceServerConfiguration, extensions.db.session))

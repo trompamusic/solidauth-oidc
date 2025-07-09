@@ -12,7 +12,7 @@ import requests.utils
 from oic.oic import Client as OicClient
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
 
-from trompasolid.dpop import make_random_string, make_token_for
+from solidauth.dpop import make_random_string, make_token_for
 
 logger = logging.getLogger(__name__)
 

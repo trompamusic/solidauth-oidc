@@ -3,13 +3,13 @@ from urllib.error import HTTPError
 
 import pytest
 
-from trompasolid import solid
+from solidauth import solid
 
 
 class TestIsWebID:
     """Test cases for the is_webid function."""
 
-    @patch("trompasolid.solid.lookup_provider_from_profile")
+    @patch("solidauth.solid.lookup_provider_from_profile")
     def test_is_webid_with_valid_provider(self, mock_lookup):
         """Test that is_webid returns True when lookup_provider_from_profile returns a provider."""
         mock_lookup.return_value = "https://example.com"
@@ -19,7 +19,7 @@ class TestIsWebID:
         assert result is True
         mock_lookup.assert_called_once_with("https://alice.example.com/profile/card#me")
 
-    @patch("trompasolid.solid.lookup_provider_from_profile")
+    @patch("solidauth.solid.lookup_provider_from_profile")
     def test_is_webid_with_no_provider(self, mock_lookup):
         """Test that is_webid returns False when lookup_provider_from_profile returns None."""
         mock_lookup.return_value = None
@@ -29,7 +29,7 @@ class TestIsWebID:
         assert result is False
         mock_lookup.assert_called_once_with("https://alice.example.com/profile/card#me")
 
-    @patch("trompasolid.solid.lookup_provider_from_profile")
+    @patch("solidauth.solid.lookup_provider_from_profile")
     def test_is_webid_with_http_error(self, mock_lookup):
         """Test that is_webid returns False when lookup_provider_from_profile raises HTTPError."""
         mock_lookup.side_effect = HTTPError("https://example.com", 404, "Not Found", {}, None)
@@ -128,52 +128,23 @@ class TestOpCanDoDynamicRegistration:
 class TestOpSupportsClientIDDocumentRegistration:
     """Test cases for the op_supports_client_id_document_registration function."""
 
-    def test_op_supports_client_id_document_registration_with_none_auth_method(self):
-        """Test that function returns True when 'none' auth method is supported."""
+    def test_op_does_not_support_client_id_document_registration_missing_webid_scope(self):
+        """Test that function returns False when webid scope is not supported."""
         op_config = {
             "registration_endpoint": "https://example.com/register",
-            "registration_endpoint_auth_methods_supported": ["none", "client_secret_basic"],
-        }
-
-        result = solid.op_supports_client_id_document_registration(op_config)
-
-        assert result is True
-
-    def test_op_supports_client_id_document_registration_without_auth_methods(self):
-        """Test that function returns True when no auth methods are specified."""
-        op_config = {
-            "registration_endpoint": "https://example.com/register",
-            "registration_endpoint_auth_methods_supported": [],
-        }
-
-        result = solid.op_supports_client_id_document_registration(op_config)
-
-        assert result is True
-
-    def test_op_supports_client_id_document_registration_missing_auth_methods_field(self):
-        """Test that function returns True when auth methods field is missing."""
-        op_config = {"registration_endpoint": "https://example.com/register"}
-
-        result = solid.op_supports_client_id_document_registration(op_config)
-
-        assert result is True
-
-    def test_op_does_not_support_client_id_document_registration_with_auth_methods(self):
-        """Test that function returns False when auth methods are required."""
-        op_config = {
-            "registration_endpoint": "https://example.com/register",
-            "registration_endpoint_auth_methods_supported": ["client_secret_basic", "private_key_jwt"],
+            "registration_endpoint_auth_methods_supported": ["none"],
+            "scopes_supported": ["openid", "offline_access"],
         }
 
         result = solid.op_supports_client_id_document_registration(op_config)
 
         assert result is False
 
-    def test_op_does_not_support_client_id_document_registration_no_endpoint(self):
-        """Test that function returns False when no registration endpoint."""
+    def test_op_does_not_support_client_id_document_registration_missing_scopes_supported_field(self):
+        """Test that function returns False when scopes_supported field is missing."""
         op_config = {
-            "authorization_endpoint": "https://example.com/authorize",
-            "token_endpoint": "https://example.com/token",
+            "registration_endpoint": "https://example.com/register",
+            "registration_endpoint_auth_methods_supported": ["none"],
         }
 
         result = solid.op_supports_client_id_document_registration(op_config)

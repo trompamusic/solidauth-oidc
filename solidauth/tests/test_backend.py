@@ -3,8 +3,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from trompasolid.backend.db_backend import DBBackend
-from trompasolid.backend.redis_backend import RedisBackend
+from solidauth.backend.db_backend import DBBackend
+from solidauth.backend.redis_backend import RedisBackend
 
 
 class TestDBBackend:
@@ -28,7 +28,7 @@ class TestDBBackend:
     def test_save_configuration_token_with_client_id(self, db_backend, mock_session):
         """Test saving a configuration token with client_id."""
         # Mock the database model
-        from trompasolid import db
+        from solidauth import db
 
         Mock(spec=db.ConfigurationToken)
         mock_session.query.return_value.filter_by.return_value.first.return_value = None
@@ -54,7 +54,7 @@ class TestDBBackend:
     def test_save_configuration_token_without_client_registration(self, db_backend, mock_session):
         """Test saving a configuration token when no client registration exists."""
         # Mock the database model
-        from trompasolid import db
+        from solidauth import db
 
         Mock(spec=db.ConfigurationToken)
         mock_session.query.return_value.filter_by.return_value.first.return_value = None
@@ -75,7 +75,7 @@ class TestDBBackend:
     def test_get_configuration_token_with_client_id(self, db_backend, mock_session):
         """Test getting a configuration token with specific client_id."""
         # Mock the database model and return value
-        from trompasolid import db
+        from solidauth import db
 
         mock_db_token = Mock(spec=db.ConfigurationToken)
         mock_db_token.issuer = "https://issuer.example"
@@ -101,7 +101,7 @@ class TestDBBackend:
     def test_get_configuration_tokens(self, db_backend, mock_session):
         """Test getting all configuration tokens."""
         # Mock the database model and return values
-        from trompasolid import db
+        from solidauth import db
 
         mock_db_token1 = Mock(spec=db.ConfigurationToken)
         mock_db_token1.issuer = "https://issuer1.example"

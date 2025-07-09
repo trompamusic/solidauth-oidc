@@ -5,19 +5,19 @@ import flask
 from flask import current_app, jsonify, request, session, url_for
 from flask_login import login_required, login_user, logout_user
 
-import trompasolid.solid
-from solid import db, extensions, get_sample_client_registration
-from solid.admin import init_admin
-from solid.auth import LoginForm, is_safe_url
-from trompasolid.authentication import (
+import solidauth.solid
+from soliddemo import db, extensions, get_sample_client_registration
+from soliddemo.admin import init_admin
+from soliddemo.auth import LoginForm, is_safe_url
+from solidauth.authentication import (
     BadClientIdError,
     NoProviderError,
     authentication_callback,
     generate_authentication_url,
 )
-from trompasolid.backend import SolidBackend
-from trompasolid.backend.db_backend import DBBackend
-from trompasolid.backend.redis_backend import RedisBackend
+from solidauth.backend import SolidBackend
+from solidauth.backend.db_backend import DBBackend
+from solidauth.backend.redis_backend import RedisBackend
 
 backend: Optional[SolidBackend] = None
 
@@ -47,8 +47,8 @@ def configure_logging():
                 },
             },
             "loggers": {
-                "trompasolid": {"level": "DEBUG", "handlers": ["console"], "propagate": False},
-                "solid": {"level": "DEBUG", "handlers": ["console"], "propagate": False},
+                "solidauth": {"level": "DEBUG", "handlers": ["console"], "propagate": False},
+                "soliddemo": {"level": "DEBUG", "handlers": ["console"], "propagate": False},
             },
         }
     )
@@ -79,7 +79,7 @@ def create_app():
         if backend.is_ready():
             if not backend.get_relying_party_keys():
                 print("On startup generating new RP keys")
-                new_key = trompasolid.solid.generate_keys()
+                new_key = solidauth.solid.generate_keys()
                 backend.save_relying_party_keys(new_key)
         else:
             print("Warning: Backend isn't ready yet")
