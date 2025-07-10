@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setup(
-    name="solidauth",
+    name="solidauth-oidc",
     author="Music Technology Group, Universitat Pompeu Fabra",
     install_requires=["requests", "redis", "PyJWT>=2.0.0", "jwcrypto", "six", "cryptography"],
     description="A python library for communicating with a SOLID pod",
@@ -23,5 +23,5 @@ setup(
         "Topic :: Scientific/Engineering :: Information Analysis",
         "Topic :: Software Development :: Libraries",
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.10",
 )
