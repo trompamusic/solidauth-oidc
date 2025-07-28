@@ -177,7 +177,7 @@ class SolidClient:
 
         return client_id, client_secret
 
-    def authentication_callback(self, backend, auth_code, state, provider, redirect_uri, client_id_document_url=None):
+    def authentication_callback(self, auth_code, state, provider, redirect_uri, client_id_document_url=None):
         backend_state = self.backend.get_state_data(state)
 
         if backend_state is None:
@@ -190,7 +190,7 @@ class SolidClient:
 
         if provider is None:
             provider = backend_state["issuer"]
-        backend.delete_state_data(state)
+        self.backend.delete_state_data(state)
 
         provider_config = self.backend.get_resource_server_configuration(provider)
 
@@ -201,7 +201,7 @@ class SolidClient:
             client_id, client_secret = self.get_client_id_and_secret_for_provider(provider)
             auth = (client_id, client_secret)
 
-        keypair = solid.load_key(backend.get_relying_party_keys())
+        keypair = solid.load_key(self.backend.get_relying_party_keys())
         assert code_verifier is not None, f"state {state} not in backend?"
 
         success, resp = solid.validate_auth_callback(
@@ -241,7 +241,7 @@ class SolidClient:
                     webid = claims["sub"]
                 issuer = claims["iss"]
                 sub = claims["sub"]
-                backend.save_configuration_token(issuer, webid, sub, client_id, resp)
+                self.backend.save_configuration_token(issuer, webid, sub, client_id, resp)
 
                 return True, resp
 
