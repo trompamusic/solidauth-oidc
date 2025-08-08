@@ -956,7 +956,7 @@ wheels = [
 ]
 
 [[package]]
-name = "solid-oidc-app-permission"
+name = "solidauth-oidc"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
