@@ -482,6 +482,37 @@ def get_file(profile, directory, name, use_client_id_document):
     """Get information about a file in the Solid pod"""
     print(f"Getting info for file: {directory}/{name}")
 
+    r = do_request(profile, directory, name, use_client_id_document)
+    if r.status_code == 200:
+        print("Successfully got file")
+        print(r.text)
+    else:
+        print(f"Unexpected status code: {r.status_code}: {r.text}")
+
+
+@file.command()
+@click.argument("profile")
+@click.argument("directory")
+@click.option("--use-client-id-document", is_flag=True, help="Use client ID document instead of dynamic registration")
+def list_container(profile, directory, use_client_id_document):
+    """List a container in the Solid pod"""
+    print(f"Listing container: {profile}")
+
+    r = do_request(
+        profile,
+        directory,
+        name=None,
+        use_client_id_document=use_client_id_document,
+        extra_headers={"Accept": "application/ld+json"},
+    )
+    if r.status_code == 200:
+        print("Successfully got container")
+        print(json.dumps(r.json(), indent=2))
+    else:
+        print(f"Unexpected status code: {r.status_code}: {r.text}")
+
+
+def do_request(profile, directory, name=None, use_client_id_document=False, extra_headers=None):
     c = client.SolidClient(get_backend(), use_client_id_document)
 
     provider = solid.lookup_provider_from_profile(profile)
@@ -493,11 +524,13 @@ def get_file(profile, directory, name, use_client_id_document):
         print("Cannot find storage, quitting")
         return
 
-    file_path = os.path.join(storage, os.path.normpath(os.path.join(directory, name)))
-    headers = c.get_bearer_for_user(provider, profile, file_path, "GET")
-    r = requests.get(file_path, headers=headers)
-    if r.status_code == 200:
-        print("Successfully got file")
-        print(r.text)
+    if name:
+        file_path = os.path.join(storage, os.path.normpath(os.path.join(directory, name)))
     else:
-        print(f"Unexpected status code: {r.status_code}: {r.text}")
+        file_path = os.path.join(storage, os.path.normpath(directory))
+
+    headers = c.get_bearer_for_user(provider, profile, file_path, "GET")
+    if extra_headers:
+        headers.update(extra_headers)
+
+    return requests.get(file_path, headers=headers)
