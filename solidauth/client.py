@@ -81,6 +81,8 @@ class SolidClient:
             else:
                 logger.debug("... refresh failed")
                 raise TokenRefreshFailed()
+        else:
+            access_token = configuration_token.data["access_token"]
 
         key = self.backend.get_relying_party_keys()
         private_key = jwcrypto.jwk.JWK.from_json(key)
