@@ -173,7 +173,8 @@ def auth_request(profileurl, use_client_id_document):
     if use_client_id_document:
         print("Using client_id as URL for auth request")
         base_url = current_app.config["BASE_URL"]
-        client_id = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
+        url = f"/client/solid-oidc-client{CLIENT_ID_DOCUMENT_SUFFIX}.jsonld"
+        client_id = base_url + url
     else:
         print("Using client from dynamic registration for auth request")
         client_registration = get_backend().get_client_registration(provider)
@@ -219,6 +220,9 @@ def exchange_auth(code, state, provider, use_client_id_document):
 
     if use_client_id_document:
         auth = None
+        base_url = current_app.config["BASE_URL"]
+        url = f"/client/solid-oidc-client{CLIENT_ID_DOCUMENT_SUFFIX}.jsonld"
+        client_id = base_url + url
     else:
         client_id, client_secret = c.get_client_id_and_secret_for_provider(provider)
         auth = (client_id, client_secret)
@@ -341,7 +345,8 @@ def refresh(profile, use_client_id_document):
         client_id, client_secret = c.get_client_id_and_secret_for_provider(provider)
         auth = (client_id, client_secret)
 
-    configuration_token = c.get_configuration_token(provider, profile, client_id)
+    configuration_token = backend.get_configuration_token(provider, profile, use_client_id_document)
+    client_id = configuration_token.client_id
     if not configuration_token.has_expired():
         print("Configuration token has not expired, skipping refresh")
         return

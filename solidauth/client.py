@@ -19,6 +19,12 @@ class NoProviderError(Exception):
     pass
 
 
+class NoSuchAuthenticationError(Exception):
+    """Raised if there is no authentication for a given provider and profile."""
+
+    pass
+
+
 class ClientDoesNotSupportDynamicRegistration(Exception):
     """Raised when a client does not support dynamic registration."""
 
@@ -47,6 +53,9 @@ class SolidClient:
         to write to this provider as the user."""
 
         configuration_token = self.backend.get_configuration_token(provider, profile, self.use_client_id_document)
+        if configuration_token is None:
+            raise NoSuchAuthenticationError(f"No authentication found for {profile} and {provider}")
+
         client_id = configuration_token.client_id
         if configuration_token.has_expired():
             logger.debug(f"Token for {profile} has expired, refreshing")

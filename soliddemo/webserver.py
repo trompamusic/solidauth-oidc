@@ -196,7 +196,8 @@ def web_redirect():
 
     redirect_uri = current_app.config["REDIRECT_URL"]
     base_url = current_app.config["BASE_URL"]
-    use_client_id_document = flask.session.get("use_client_id_document", False)
+    default_use_client_id_document = current_app.config["USE_CLIENT_ID_DOCUMENT"]
+    use_client_id_document = flask.session.get("use_client_id_document", default_use_client_id_document)
     if use_client_id_document:
         client_id_document_url = base_url + url_for("register.client_id_url", suffix=CLIENT_ID_DOCUMENT_SUFFIX)
     else:
