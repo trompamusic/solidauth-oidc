@@ -52,6 +52,10 @@ class SolidBackend(ABC):
         pass
 
     @abstractmethod
+    def delete_configuration_token(self, issuer, profile, use_client_id_document):
+        pass
+
+    @abstractmethod
     def get_configuration_tokens(self):
         pass
 

@@ -23,7 +23,10 @@ logger = logging.getLogger(__name__)
 class IDTokenValidationError(Exception):
     """Raised when ID token validation fails."""
 
-    pass
+    def __init__(self, code: str, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(message)
 
 
 def lookup_provider_from_profile(profile_url: str):
@@ -134,58 +137,62 @@ def validate_id_token_claims(claims, expected_issuer, client_id, max_age=None, n
     """
     # Validate issuer
     if claims.get("iss") != expected_issuer:
-        raise IDTokenValidationError(f"Invalid issuer: expected {expected_issuer}, got {claims.get('iss')}")
+        raise IDTokenValidationError(
+            "INVALID_ISSUER", f"Invalid issuer: expected {expected_issuer}, got {claims.get('iss')}"
+        )
 
     # Validate audience
     aud = claims.get("aud")
     if not aud:
-        raise IDTokenValidationError("Missing 'aud' claim")
+        raise IDTokenValidationError("MISSING_AUD", "Missing 'aud' claim")
 
     # aud can be a string or list of strings
     if isinstance(aud, str):
         if aud != client_id:
-            raise IDTokenValidationError(f"Invalid audience: expected {client_id}, got {aud}")
+            raise IDTokenValidationError("INVALID_AUD_STRING", f"Invalid audience: expected {client_id}, got {aud}")
     elif isinstance(aud, list):
         if client_id not in aud:
-            raise IDTokenValidationError(f"Client ID {client_id} not in audience list {aud}")
+            raise IDTokenValidationError("INVALID_AUD_LIST", f"Client ID {client_id} not in audience list {aud}")
     else:
-        raise IDTokenValidationError(f"Invalid 'aud' claim type: {type(aud)}")
+        raise IDTokenValidationError("INVALID_AUD_TYPE", f"Invalid 'aud' claim type: {type(aud)}")
 
     # Validate expiration time
     exp = claims.get("exp")
     if not exp:
-        raise IDTokenValidationError("Missing 'exp' claim")
+        raise IDTokenValidationError("MISSING_EXP", "Missing 'exp' claim")
 
     current_time = int(time.time())
     if exp < current_time:
-        raise IDTokenValidationError(f"Token has expired: exp={exp}, current_time={current_time}")
+        raise IDTokenValidationError("TOKEN_EXPIRED", f"Token has expired: exp={exp}, current_time={current_time}")
 
     # Validate issued at time
     iat = claims.get("iat")
     if not iat:
-        raise IDTokenValidationError("Missing 'iat' claim")
+        raise IDTokenValidationError("MISSING_IAT", "Missing 'iat' claim")
 
     # iat should not be in the future (with small tolerance for clock skew)
     clock_skew = 300  # 5 minutes tolerance
     if iat > current_time + clock_skew:
-        raise IDTokenValidationError(f"Token issued in the future: iat={iat}, current_time={current_time}")
+        raise IDTokenValidationError(
+            "IAT_IN_FUTURE", f"Token issued in the future: iat={iat}, current_time={current_time}"
+        )
 
     # Validate max_age if specified
     if max_age is not None:
         auth_time = claims.get("auth_time")
         if not auth_time:
-            raise IDTokenValidationError("max_age specified but 'auth_time' claim missing")
+            raise IDTokenValidationError("MISSING_AUTH_TIME", "max_age specified but 'auth_time' claim missing")
 
         if auth_time + max_age < current_time:
-            raise IDTokenValidationError(f"Token too old: auth_time={auth_time}, max_age={max_age}")
+            raise IDTokenValidationError("TOKEN_TOO_OLD", f"Token too old: auth_time={auth_time}, max_age={max_age}")
 
     # Validate nonce if specified
     if nonce is not None:
         token_nonce = claims.get("nonce")
         if not token_nonce:
-            raise IDTokenValidationError("nonce expected but missing from token")
+            raise IDTokenValidationError("MISSING_NONCE", "nonce expected but missing from token")
         if token_nonce != nonce:
-            raise IDTokenValidationError(f"Invalid nonce: expected {nonce}, got {token_nonce}")
+            raise IDTokenValidationError("INVALID_NONCE", f"Invalid nonce: expected {nonce}, got {token_nonce}")
 
 
 def select_jwk_by_kid(jwks, kid):
@@ -320,6 +327,16 @@ def generate_authorization_request(configuration, redirect_url, client_id, state
 
 
 def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, client_id, redirect_uri, auth=None):
+    print(f"{keypair=}")
+    print(f"{code_verifier=}")
+    print(f"{auth_code=}")
+    print(f"{provider_info=}")
+    print(f"{client_id=}")
+    print(f"{redirect_uri=}")
+    print(f"{auth=}")
+    print(f"{provider_info['token_endpoint']=}")
+    print(f"{make_token_for(keypair, provider_info['token_endpoint'], 'POST')=}")
+
     # Exchange auth code for access token
     resp = requests.post(
         url=provider_info["token_endpoint"],
@@ -351,18 +368,25 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
 
 def refresh_auth_token(keypair, provider_info, client_id, configuration_token, auth=None):
     refresh_token = configuration_token.data["refresh_token"]
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
     resp = requests.post(
         url=provider_info["token_endpoint"],
-        data={
-            "grant_type": "refresh_token",
-            "refresh_token": refresh_token,
-            "client_id": client_id,
-        },
+        data=data,
         headers={"DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")},
         auth=auth,
         allow_redirects=False,
         timeout=10,
     )
+    print(f"url: {provider_info['token_endpoint']}")
+    print(f"headers: {make_token_for(keypair, provider_info['token_endpoint'], 'POST')}")
+    print(f"data: {data}")
+    print(f"auth: {auth}")
+    print(f"allow_redirects: {False}")
+    print(f"timeout: {10}")
     try:
         resp.raise_for_status()
         result = resp.json()

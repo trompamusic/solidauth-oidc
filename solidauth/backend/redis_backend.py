@@ -87,6 +87,14 @@ class RedisBackend(SolidBackend):
 
         return result
 
+    def delete_configuration_token(self, issuer, profile, use_client_id_document):
+        token_key = make_redis_key(CONFIG_TOKENS, issuer, profile, use_client_id_document)
+        self.redis_client.delete(token_key)
+
+        # Remove from the list of all tokens for get_configuration_tokens
+        list_key = REDIS_KEY_PREFIX + CONFIG_TOKENS_LIST
+        self.redis_client.srem(list_key, token_key)
+
     def get_configuration_token(self, issuer, profile, use_client_id_document):
         return self.get_redis_str(make_redis_key(CONFIG_TOKENS, issuer, profile, use_client_id_document))
 

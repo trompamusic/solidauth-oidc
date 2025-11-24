@@ -48,10 +48,19 @@ class SolidClient:
         self.backend = backend
         self.use_client_id_document = use_client_id_document
 
-    def get_bearer_for_user(self, provider, profile, url, method):
-        """Given a solid provider, and a user vcard, get the bearer token needed
-        to write to this provider as the user."""
+    def get_valid_access_token(self, provider, profile):
+        """Check if the authentication is valid for the given provider and profile and return the access token.
+        If the token exists but is expired, try and refresh it.
 
+        If there is no token, the token is invalid, or the refresh fails, raise an exception indicating the situation
+
+        Returns:
+        - access_token: A valid access token
+
+        Raises:
+        - NoSuchAuthenticationError: If there is no authentication for the given provider and profile
+        - TokenRefreshFailed: If the token refresh fails
+        """
         configuration_token = self.backend.get_configuration_token(provider, profile, self.use_client_id_document)
         if configuration_token is None:
             raise NoSuchAuthenticationError(f"No authentication found for {profile} and {provider}")
@@ -80,10 +89,20 @@ class SolidClient:
                 logger.debug("... refreshed")
             else:
                 logger.debug("... refresh failed")
-                raise TokenRefreshFailed()
+                message = str(resp)
+                if "message" in resp:
+                    message = resp["message"]
+                raise TokenRefreshFailed(message)
         else:
             access_token = configuration_token.data["access_token"]
 
+        return access_token
+
+    def get_bearer_for_user(self, provider, profile, url, method):
+        """Given a solid provider, and a user vcard, get the bearer token needed
+        to write to this provider as the user."""
+
+        access_token = self.get_valid_access_token(provider, profile)
         key = self.backend.get_relying_party_keys()
         private_key = jwcrypto.jwk.JWK.from_json(key)
         # CSS Fails with a cryptic error if this field doesn't exist

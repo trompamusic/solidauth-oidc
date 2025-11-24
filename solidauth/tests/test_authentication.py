@@ -370,7 +370,9 @@ class TestStateParameterSecurity:
     @patch("solidauth.authentication.get_jwt_kid", return_value="kid1")
     @patch("solidauth.authentication.select_jwk_by_kid")
     @patch("solidauth.authentication.jwcrypto.jwt.JWT")
-    @patch("solidauth.authentication.validate_id_token_claims", side_effect=IDTokenValidationError("fail"))
+    @patch(
+        "solidauth.authentication.validate_id_token_claims", side_effect=IDTokenValidationError("TEST_ERROR", "fail")
+    )
     @patch("solidauth.authentication.solid")
     def test_state_deleted_after_callback_failure(
         self, mock_solid, mock_validate, mock_jwt, mock_select_jwk, mock_get_kid

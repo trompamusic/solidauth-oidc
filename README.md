@@ -93,6 +93,7 @@ from solidauth.backend.db_backend import DBBackend
 from solidauth.backend.redis_backend import RedisBackend
 from solidauth.db import Base
 from solidauth import client
+from soliddemo.extensions import db
 
 backend = DBBackend(db.session)
 # or

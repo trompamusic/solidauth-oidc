@@ -123,6 +123,17 @@ class DBBackend(SolidBackend):
         else:
             return None
 
+    def delete_configuration_token(self, issuer, profile, use_client_id_document):
+        ct = self.session.query(db.ConfigurationToken).where(
+            db.ConfigurationToken.issuer == issuer, db.ConfigurationToken.profile == profile
+        )
+        if use_client_id_document:
+            ct = ct.where(db.ConfigurationToken.client_registration_id.is_(None))
+        ct = ct.first()
+        if ct:
+            self.session.delete(ct)
+            self.session.commit()
+
     def get_configuration_tokens(self):
         cts = self.session.query(db.ConfigurationToken).all()
         return [

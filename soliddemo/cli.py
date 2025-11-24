@@ -331,6 +331,8 @@ def exchange_auth_url(ctx, url, use_client_id_document):
 @click.argument("profile")
 @click.option("--use-client-id-document", is_flag=True, help="Use client ID document instead of dynamic registration")
 def refresh(profile, use_client_id_document):
+    """Refresh an expired token."""
+
     provider = solid.lookup_provider_from_profile(profile)
     backend = get_backend()
 
@@ -346,6 +348,9 @@ def refresh(profile, use_client_id_document):
         auth = (client_id, client_secret)
 
     configuration_token = backend.get_configuration_token(provider, profile, use_client_id_document)
+    if not configuration_token:
+        print("No configuration token found, authenticate with `auth-request` and `exchange-auth` first")
+        return
     client_id = configuration_token.client_id
     if not configuration_token.has_expired():
         print("Configuration token has not expired, skipping refresh")
