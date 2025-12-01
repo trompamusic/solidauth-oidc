@@ -1,6 +1,7 @@
 import datetime
 
 import sqlalchemy.exc
+from sqlalchemy.orm import joinedload
 
 from solidauth import db, model
 from solidauth.backend import SolidBackend
@@ -109,16 +110,31 @@ class DBBackend(SolidBackend):
         It's only possible to have a maximum of two Configuration Tokens for a issuer/profile combination, either
         related to a single ClientRegistration, or a single client id.
         """
-        ct = self.session.query(db.ConfigurationToken).where(
-            db.ConfigurationToken.issuer == issuer, db.ConfigurationToken.profile == profile
+        ct = (
+            self.session.query(db.ConfigurationToken)
+            .options(joinedload(db.ConfigurationToken.client_registration))
+            .where(db.ConfigurationToken.issuer == issuer, db.ConfigurationToken.profile == profile)
         )
         if use_client_id_document:
             ct = ct.where(db.ConfigurationToken.client_registration_id.is_(None))
         ct = ct.first()
 
         if ct:
+            client_registration = None
+            if ct.client_registration:
+                client_registration = model.ClientRegistration(
+                    provider=ct.client_registration.provider,
+                    client_id=ct.client_registration.client_id,
+                    data=ct.client_registration.data,
+                )
             return model.ConfigurationToken(
-                issuer=ct.issuer, sub=ct.sub, profile=ct.profile, client_id=ct.client_id, added=ct.added, data=ct.data
+                issuer=ct.issuer,
+                sub=ct.sub,
+                profile=ct.profile,
+                client_id=ct.client_id,
+                added=ct.added,
+                data=ct.data,
+                client_registration=client_registration,
             )
         else:
             return None
@@ -135,13 +151,32 @@ class DBBackend(SolidBackend):
             self.session.commit()
 
     def get_configuration_tokens(self):
-        cts = self.session.query(db.ConfigurationToken).all()
-        return [
-            model.ConfigurationToken(
-                issuer=ct.issuer, sub=ct.sub, profile=ct.profile, client_id=ct.client_id, added=ct.added, data=ct.data
+        cts = (
+            self.session.query(db.ConfigurationToken)
+            .options(joinedload(db.ConfigurationToken.client_registration))
+            .all()
+        )
+        result = []
+        for ct in cts:
+            client_registration = None
+            if ct.client_registration:
+                client_registration = model.ClientRegistration(
+                    provider=ct.client_registration.provider,
+                    client_id=ct.client_registration.client_id,
+                    data=ct.client_registration.data,
+                )
+            result.append(
+                model.ConfigurationToken(
+                    issuer=ct.issuer,
+                    sub=ct.sub,
+                    profile=ct.profile,
+                    client_id=ct.client_id,
+                    added=ct.added,
+                    data=ct.data,
+                    client_registration=client_registration,
+                )
             )
-            for ct in cts
-        ]
+        return result
 
     def get_state_data(self, state):
         st = self.session.query(db.State).filter_by(state=state).first()

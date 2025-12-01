@@ -23,6 +23,13 @@ class RelyingPartyKeys:
 
 
 @dataclass
+class ClientRegistration:
+    provider: str
+    client_id: str
+    data: dict
+
+
+@dataclass
 class ConfigurationToken:
     issuer: str
     sub: str
@@ -30,6 +37,7 @@ class ConfigurationToken:
     client_id: str
     added: datetime.datetime
     data: dict
+    client_registration: ClientRegistration | None = None
 
     def has_expired(self):
         expires_in = self.data["expires_in"]
