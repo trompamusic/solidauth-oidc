@@ -4,7 +4,7 @@ ENV UV_LINK_MODE=copy \
   UV_COMPILE_BYTECODE=1 \
   UV_PYTHON_DOWNLOADS=never
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.9.15 /uv /uvx /bin/
 
 RUN mkdir /code
 WORKDIR /code
