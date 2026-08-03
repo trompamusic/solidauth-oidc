@@ -7,8 +7,8 @@ import urllib.parse
 from urllib.error import HTTPError
 
 import jwcrypto.jwk
+import jwcrypto.jws
 import jwcrypto.jwt
-import jwt
 import rdflib
 import requests
 import requests.utils
@@ -234,9 +234,10 @@ def get_jwt_kid(token):
         Key ID from the JWT header, or None if not present
     """
     try:
-        header = jwt.get_unverified_header(token)
-        return header.get("kid")
-    except jwt.DecodeError as e:
+        signed_token = jwcrypto.jws.JWS()
+        signed_token.deserialize(token)
+        return signed_token.jose_header.get("kid")
+    except jwcrypto.jws.InvalidJWSObject as e:
         logger.debug("Error extracting kid from JWT", exc_info=e)
         return None
 
