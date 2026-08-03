@@ -1,3 +1,11 @@
-env
-.idea
-__pycache__
+.env
+.python-version
+.pytest_cache/
+.ruff_cache/
+.venv/
+.idea/
+*.egg-info/
+__pycache__/
+build/
+dist/
+env/

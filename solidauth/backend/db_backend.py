@@ -98,7 +98,7 @@ class DBBackend(SolidBackend):
         )
         if ct:
             ct.data = token
-            ct.added = datetime.datetime.now(tz=datetime.timezone.utc)
+            ct.added = datetime.datetime.now(tz=datetime.UTC)
             self.session.add(ct)
             self.session.commit()
 

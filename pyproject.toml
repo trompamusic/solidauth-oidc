@@ -1,9 +1,30 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "solidauth-oidc"
 version = "0.1.0"
-description = "Solid OIDC client for python"
+description = "Solid OIDC client for Python"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Music Technology Group, Universitat Pompeu Fabra" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Software Development :: Libraries",
+]
 dependencies = [
     "click~=8.1.0",
     "flask~=3.1.0",
@@ -26,9 +47,16 @@ dependencies = [
     "wtforms~=3.2.1",
 ]
 
+[project.urls]
+Repository = "https://github.com/trompamusic/solidauth-oidc"
+
+[tool.setuptools.packages.find]
+include = ["solidauth*"]
+exclude = ["solidauth.tests*"]
+
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 ignore = ["E741"]
