@@ -1,8 +1,10 @@
 import datetime
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Index, Text, func
+from sqlalchemy import JSON, TIMESTAMP, ForeignKey, Index, Text, func
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+JSON_DATA = JSON().with_variant(postgresql.JSONB(), "postgresql")
 
 
 class Base(DeclarativeBase):
@@ -14,7 +16,7 @@ class RelyingPartyKey(Base):
 
     __tablename__ = "relying_party"
     id: Mapped[int] = mapped_column(primary_key=True)
-    data: Mapped[dict] = mapped_column(postgresql.JSONB)
+    data: Mapped[dict] = mapped_column(JSON_DATA)
 
     def __repr__(self):
         return f"<RelyingPartyKey {self.id}>"
@@ -24,7 +26,7 @@ class ResourceServerConfiguration(Base):
     __tablename__ = "resource_server_configuration"
     id: Mapped[int] = mapped_column(primary_key=True)
     provider: Mapped[str] = mapped_column(Text, nullable=False, index=True)
-    data: Mapped[dict] = mapped_column(postgresql.JSONB)
+    data: Mapped[dict] = mapped_column(JSON_DATA)
 
     def __repr__(self):
         return f"<ResourceServerConfiguration {self.id} ({self.provider})>"
@@ -34,7 +36,7 @@ class ResourceServerKeys(Base):
     __tablename__ = "resource_server_keys"
     id: Mapped[int] = mapped_column(primary_key=True)
     provider: Mapped[str] = mapped_column(Text, nullable=False, index=True, unique=True)
-    data: Mapped[dict] = mapped_column(postgresql.JSONB)
+    data: Mapped[dict] = mapped_column(JSON_DATA)
 
     def __repr__(self):
         return f"<ResourceServerKeys {self.id} ({self.provider})>"
@@ -45,7 +47,7 @@ class ClientRegistration(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     provider: Mapped[str] = mapped_column(Text, nullable=False, index=True, unique=True)
     client_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
-    data: Mapped[dict] = mapped_column(postgresql.JSONB)
+    data: Mapped[dict] = mapped_column(JSON_DATA)
     configuration_tokens: Mapped[list["ConfigurationToken"]] = relationship(
         "ConfigurationToken", back_populates="client_registration"
     )
@@ -64,7 +66,7 @@ class ConfigurationToken(Base):
     added: Mapped[datetime.datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
-    data: Mapped[dict] = mapped_column(postgresql.JSONB)
+    data: Mapped[dict] = mapped_column(JSON_DATA)
     client_registration_id: Mapped[int] = mapped_column(ForeignKey("client_registration.id"), nullable=True)
     client_registration: Mapped["ClientRegistration"] = relationship(
         "ClientRegistration", back_populates="configuration_tokens"

@@ -5,13 +5,8 @@ import jwcrypto.jwk
 import jwcrypto.jwt
 import pytest
 
-from solidauth.authentication import (
-    IDTokenValidationError,
-    authentication_callback,
-    get_jwt_kid,
-    select_jwk_by_kid,
-    validate_id_token_claims,
-)
+from solidauth.client import ClientIDDocumentRegistrationNotSupportedError, SolidClient
+from solidauth.solid import IDTokenValidationError, get_jwt_kid, select_jwk_by_kid, validate_id_token_claims
 
 
 class TestJWTKeySelection:
@@ -302,13 +297,9 @@ class TestJWTKeySelectionIntegration:
 class TestClientIDDocumentRegistration:
     """Test cases for client ID document registration checking."""
 
-    def test_generate_authentication_url_raises_error_when_client_id_document_not_supported(self):
+    @patch("solidauth.client.solid.is_webid", return_value=False)
+    def test_generate_authentication_url_raises_error_when_client_id_document_not_supported(self, _mock_is_webid):
         """Test that generate_authentication_url raises error when client ID document registration is not supported."""
-        from solidauth.authentication import (
-            ClientIDDocumentRegistrationNotSupportedError,
-            generate_authentication_url,
-        )
-
         backend = Mock()
         backend.get_resource_server_configuration.return_value = {
             "issuer": "https://issuer.example",
@@ -328,27 +319,18 @@ class TestClientIDDocumentRegistration:
         with pytest.raises(
             ClientIDDocumentRegistrationNotSupportedError, match="does not support client ID document registration"
         ):
-            generate_authentication_url(
-                backend,
+            SolidClient(backend, use_client_id_document=True).generate_authentication_url(
                 "https://issuer.example",
-                "test_client",
+                {},
                 "https://redirect.example",
                 "https://base.example",
-                always_use_client_id_document=True,
             )
 
 
 class TestStateParameterSecurity:
     """Test that state parameter is deleted after use in authentication_callback."""
 
-    @patch("solidauth.authentication.get_jwt_kid", return_value="kid1")
-    @patch("solidauth.authentication.select_jwk_by_kid")
-    @patch("solidauth.authentication.jwcrypto.jwt.JWT")
-    @patch("solidauth.authentication.validate_id_token_claims")
-    @patch("solidauth.authentication.solid")
-    def test_state_deleted_after_callback_success(
-        self, mock_solid, mock_validate, mock_jwt, mock_select_jwk, mock_get_kid
-    ):
+    def test_state_deleted_after_callback_success(self):
         backend = Mock()
         backend.get_resource_server_configuration.return_value = {"issuer": "https://issuer.example"}
         backend.get_state_data.return_value = {"code_verifier": "verifier", "issuer": "https://issuer.example"}
@@ -359,24 +341,22 @@ class TestStateParameterSecurity:
         backend.save_configuration_token = Mock()
         backend.delete_state_data = Mock()
 
-        # Simulate successful validate_auth_callback
-        mock_solid.validate_auth_callback.return_value = (True, {"id_token": "token"})
-        mock_jwt.return_value.claims = '{"iss": "https://issuer.example", "sub": "sub", "webid": "webid"}'
-
-        authentication_callback(backend, "auth_code", "state123", "https://issuer.example", "redirect", "base", False)
+        with (
+            patch("solidauth.client.solid.load_key"),
+            patch("solidauth.client.solid.validate_auth_callback", return_value=(True, {"id_token": "token"})),
+            patch("solidauth.client.solid.get_jwt_kid", return_value="kid1"),
+            patch("solidauth.client.solid.select_jwk_by_kid"),
+            patch("solidauth.client.solid.validate_id_token_claims"),
+            patch("solidauth.client.jwcrypto.jwt.JWT") as mock_jwt,
+        ):
+            mock_jwt.return_value.claims = '{"iss": "https://issuer.example", "sub": "sub", "webid": "webid"}'
+            SolidClient(backend, use_client_id_document=False).authentication_callback(
+                "auth_code", "state123", "https://issuer.example", "redirect"
+            )
 
         backend.delete_state_data.assert_called_once_with("state123")
 
-    @patch("solidauth.authentication.get_jwt_kid", return_value="kid1")
-    @patch("solidauth.authentication.select_jwk_by_kid")
-    @patch("solidauth.authentication.jwcrypto.jwt.JWT")
-    @patch(
-        "solidauth.authentication.validate_id_token_claims", side_effect=IDTokenValidationError("TEST_ERROR", "fail")
-    )
-    @patch("solidauth.authentication.solid")
-    def test_state_deleted_after_callback_failure(
-        self, mock_solid, mock_validate, mock_jwt, mock_select_jwk, mock_get_kid
-    ):
+    def test_state_deleted_after_callback_failure(self):
         backend = Mock()
         backend.get_resource_server_configuration.return_value = {"issuer": "https://issuer.example"}
         backend.get_state_data.return_value = {"code_verifier": "verifier", "issuer": None}
@@ -387,10 +367,20 @@ class TestStateParameterSecurity:
         backend.save_configuration_token = Mock()
         backend.delete_state_data = Mock()
 
-        # Simulate successful validate_auth_callback
-        mock_solid.validate_auth_callback.return_value = (True, {"id_token": "token"})
-        mock_jwt.return_value.claims = '{"iss": "https://issuer.example", "sub": "sub", "webid": "webid"}'
-
-        authentication_callback(backend, "auth_code", "state456", "https://issuer.example", "redirect", "base", False)
+        with (
+            patch("solidauth.client.solid.load_key"),
+            patch("solidauth.client.solid.validate_auth_callback", return_value=(True, {"id_token": "token"})),
+            patch("solidauth.client.solid.get_jwt_kid", return_value="kid1"),
+            patch("solidauth.client.solid.select_jwk_by_kid"),
+            patch(
+                "solidauth.client.solid.validate_id_token_claims",
+                side_effect=IDTokenValidationError("TEST_ERROR", "fail"),
+            ),
+            patch("solidauth.client.jwcrypto.jwt.JWT") as mock_jwt,
+        ):
+            mock_jwt.return_value.claims = '{"iss": "https://issuer.example", "sub": "sub", "webid": "webid"}'
+            SolidClient(backend, use_client_id_document=False).authentication_callback(
+                "auth_code", "state456", "https://issuer.example", "redirect"
+            )
 
         backend.delete_state_data.assert_called_once_with("state456")
