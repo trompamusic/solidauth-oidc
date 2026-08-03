@@ -13,7 +13,6 @@ from flask import Blueprint, current_app, url_for
 from solidauth import client, solid
 from solidauth.backend import SolidBackend
 from solidauth.backend.db_backend import DBBackend
-from solidauth.backend.redis_backend import RedisBackend
 from solidauth.dpop import make_random_string
 from soliddemo import extensions, get_sample_client_registration
 from soliddemo.webserver import CLIENT_ID_DOCUMENT_SUFFIX
@@ -23,12 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_backend() -> SolidBackend:
-    # function so that we have access to current_app. This should be an extension
-    if current_app.config["BACKEND"] == "db":
-        backend = DBBackend(extensions.db.session)
-    elif current_app.config["BACKEND"] == "redis":
-        backend = RedisBackend(extensions.redis_client)
-    return backend
+    return DBBackend(extensions.db.session)
 
 
 @cli_bp.cli.command()

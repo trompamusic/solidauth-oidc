@@ -21,10 +21,7 @@ To configure the application, copy the `.env.sample` file
 
 ### Backends
 
-Data from this app is stored in a _backend_. We support two backends, a database backend using sqlalchemy
-and a Redis backend, which stores data as a json object in redis.
-
-In `.env`, set `CONFIG_BACKEND` to `db` or `redis`.
+Data from this app is stored in a database backend using SQLAlchemy.
 
 # Running
 
@@ -86,20 +83,16 @@ We have a set of commandline tools to perform the steps needed to perform an aut
 You can use this library from another application.
 
 The main interfaces are in the `solidauth` package.
-You need to decide if you want to use the redis or the db backend:
 
 ```py
 from solidauth.backend.db_backend import DBBackend
-from solidauth.backend.redis_backend import RedisBackend
 from solidauth.db import Base
 from solidauth import client
 from soliddemo.extensions import db
 
 backend = DBBackend(db.session)
-# or
-backend = RedisBackend(redis_client)
 
-# Create the database tables if you use the DBBackend
+# Create the database tables
 Base.metadata.create_all(db.engine)
 
 sc = client.SolidClient(backend, use_client_id_document=True)

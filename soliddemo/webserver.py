@@ -12,7 +12,6 @@ from soliddemo.auth import LoginForm, is_safe_url
 from solidauth import client
 from solidauth.backend import SolidBackend
 from solidauth.backend.db_backend import DBBackend
-from solidauth.backend.redis_backend import RedisBackend
 
 backend: Optional[SolidBackend] = None
 
@@ -55,15 +54,11 @@ def create_app():
     app.config.from_pyfile("../config.py")
     extensions.admin.init_app(app)
     extensions.db.init_app(app)
-    extensions.redis_client.init_app(app)
     extensions.login_manager.init_app(app)
     init_admin()
 
     global backend
-    if app.config["BACKEND"] == "db":
-        backend = DBBackend(extensions.db.session)
-    elif app.config["BACKEND"] == "redis":
-        backend = RedisBackend(extensions.redis_client)
+    backend = DBBackend(extensions.db.session)
 
     @extensions.login_manager.user_loader
     def load_user(user_id):
