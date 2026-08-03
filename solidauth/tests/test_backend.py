@@ -1,5 +1,8 @@
+import os
+
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import JSON, create_engine, inspect, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from solidauth import db
@@ -11,11 +14,15 @@ class TestDBBackend:
 
     @pytest.fixture
     def session(self):
-        engine = create_engine("sqlite+pysqlite:///:memory:")
+        database_url = os.getenv("SOLIDAUTH_TEST_DATABASE_URL", "sqlite+pysqlite:///:memory:")
+        engine = create_engine(database_url)
         db.Base.metadata.create_all(engine)
-        with Session(engine) as session:
-            yield session
-        engine.dispose()
+        try:
+            with Session(engine) as session:
+                yield session
+        finally:
+            db.Base.metadata.drop_all(engine)
+            engine.dispose()
 
     @pytest.fixture
     def db_backend(self, session):
@@ -86,3 +93,12 @@ class TestDBBackend:
         assert stored.provider == "https://provider.example"
         assert stored.client_id == "client123"
         assert stored.data == registration_data
+
+    def test_data_column_uses_database_native_json_type(self, session):
+        columns = inspect(session.get_bind()).get_columns(db.ConfigurationToken.__tablename__)
+        data_column = next(column for column in columns if column["name"] == "data")
+
+        if session.get_bind().dialect.name == "postgresql":
+            assert isinstance(data_column["type"], postgresql.JSONB)
+        else:
+            assert isinstance(data_column["type"], JSON)
