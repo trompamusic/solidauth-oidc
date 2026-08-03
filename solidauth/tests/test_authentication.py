@@ -310,15 +310,15 @@ class TestClientIDDocumentRegistration:
         )
 
         backend = Mock()
-        backend.get_resource_server_configuration.return_value = dict(
-            issuer="https://issuer.example",
-            authorization_endpoint="https://issuer.example/auth",
-            token_endpoint="https://issuer.example/token",
-            registration_endpoint="https://issuer.example/register",
-            scopes_supported=["openid", "offline_access"],
-            registration_endpoint_auth_methods_supported=["client_secret_basic"],
-        )
-        backend.get_resource_server_keys.return_value = dict(keys=[])
+        backend.get_resource_server_configuration.return_value = {
+            "issuer": "https://issuer.example",
+            "authorization_endpoint": "https://issuer.example/auth",
+            "token_endpoint": "https://issuer.example/token",
+            "registration_endpoint": "https://issuer.example/register",
+            "scopes_supported": ["openid", "offline_access"],
+            "registration_endpoint_auth_methods_supported": ["client_secret_basic"],
+        }
+        backend.get_resource_server_keys.return_value = {"keys": []}
         backend.get_client_registration.return_value = None
         backend.get_state_data.return_value = None
         backend.set_state_data = Mock()

@@ -55,11 +55,11 @@ def lookup_provider_from_profile(profile_url: str):
         if triples:
             # first item in the response, 3rd item in the triple
             return triples[0][2].toPython()
-    except HTTPError as e:
-        if e.status == 404:
+    except HTTPError as exc:
+        if exc.status == 404:
             logger.debug("Cannot find a profile at this url")
         else:
-            raise e
+            raise
 
 
 def is_webid(url: str):
@@ -278,10 +278,7 @@ def op_supports_client_id_document_registration(op_config):
     """
     # Check if the provider supports the 'webid' scope
     scopes_supported = op_config.get("scopes_supported", [])
-    if "webid" not in scopes_supported:
-        return False
-
-    return True
+    return "webid" in scopes_supported
 
 
 def dynamic_registration(registration_request, op_config):
@@ -291,7 +288,7 @@ def dynamic_registration(registration_request, op_config):
 
     client = OicClient(client_authn_method=CLIENT_AUTHN_METHOD)
     registration_response = client.register(op_config["registration_endpoint"], **registration_request)
-    logger.debug("Registration response:", registration_response)
+    logger.debug("Registration response: %s", registration_response)
     return registration_response.to_dict()
 
 

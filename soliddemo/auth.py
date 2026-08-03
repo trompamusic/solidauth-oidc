@@ -1,7 +1,8 @@
-from urllib.parse import urlparse, urljoin
-from flask import request
+from urllib.parse import urljoin, urlparse
+
 import flask_wtf
 import wtforms
+from flask import request
 
 from soliddemo.db import User
 
@@ -20,12 +21,12 @@ class LoginForm(flask_wtf.FlaskForm):
 
     def __init__(self, *args, **kwargs):
         """Create instance."""
-        super(LoginForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.user = None
 
     def validate(self, extra_validators=None):
         """Validate the form."""
-        initial_validation = super(LoginForm, self).validate(extra_validators=extra_validators)
+        initial_validation = super().validate(extra_validators=extra_validators)
         if not initial_validation:
             print(self.errors)
             return False

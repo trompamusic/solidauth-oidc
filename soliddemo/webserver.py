@@ -1,19 +1,18 @@
 from logging.config import dictConfig
-from typing import Optional
 
 import flask
 from flask import current_app, jsonify, request, session, url_for
 from flask_login import login_required, login_user, logout_user
 
 import solidauth.solid
-from soliddemo import db, extensions, get_sample_client_registration
-from soliddemo.admin import init_admin
-from soliddemo.auth import LoginForm, is_safe_url
 from solidauth import client
 from solidauth.backend import SolidBackend
 from solidauth.backend.db_backend import DBBackend
+from soliddemo import db, extensions, get_sample_client_registration
+from soliddemo.admin import init_admin
+from soliddemo.auth import LoginForm, is_safe_url
 
-backend: Optional[SolidBackend] = None
+backend: SolidBackend | None = None
 
 # Some providers cache this url, so during testing we may want to change it to break the cache
 CLIENT_ID_DOCUMENT_SUFFIX = ""
@@ -202,7 +201,7 @@ def web_redirect():
         cl = client.SolidClient(backend, use_client_id_document)
         success, data = cl.authentication_callback(auth_code, state, provider, redirect_uri, client_id_document_url)
     except client.BadClientIdError as e:
-        error_message = f"Client registration error: {str(e)}"
+        error_message = f"Client registration error: {e!s}"
         return flask.render_template("error.html", error_message=error_message)
 
     if success:

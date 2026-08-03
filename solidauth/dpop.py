@@ -7,7 +7,7 @@ import jwcrypto.jwt
 
 
 def make_token_for(keypair, uri, method):
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(tz=datetime.timezone.utc)
     # DPoP tokens should have a short lifetime (5-10 minutes)
     exp_time = now + datetime.timedelta(minutes=10)
 

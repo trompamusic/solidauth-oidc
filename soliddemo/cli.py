@@ -280,13 +280,11 @@ def exchange_auth(code, state, provider, use_client_id_document):
             jwcrypto.jwt.JWTExpiredError,
             jwcrypto.jwt.JWTInvalidSignatureError,
             jwcrypto.jwt.JWTInvalidClaimError,
-            ValueError,
             TypeError,
         ) as e:
             # JWTExpiredError: Token has expired
             # JWTInvalidSignatureError: Invalid signature
             # JWTInvalidClaimError: Invalid claims
-            # ValueError: Invalid JWT format
             # TypeError: Invalid key type
             print(f"Error validating ID token: {e}")
             return False, {"error": "invalid_token", "error_description": str(e)}
@@ -389,7 +387,6 @@ def get_storage_from_profile_ttl(profile_uri):
 @cli_bp.cli.group()
 def file():
     """File-related commands"""
-    pass
 
 
 @file.command()

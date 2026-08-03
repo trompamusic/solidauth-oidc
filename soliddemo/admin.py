@@ -1,11 +1,10 @@
-from flask import redirect, url_for, request
-from flask_admin import BaseView, AdminIndexView
-from flask_login import current_user
+from flask import redirect, request, url_for
+from flask_admin import AdminIndexView, BaseView
 from flask_admin.contrib.sqla import ModelView
-
-from soliddemo import extensions
+from flask_login import current_user
 
 import solidauth.db
+from soliddemo import extensions
 
 
 class AuthBaseView(BaseView):

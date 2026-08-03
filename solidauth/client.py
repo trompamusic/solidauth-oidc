@@ -22,25 +22,17 @@ class NoProviderError(Exception):
 class NoSuchAuthenticationError(Exception):
     """Raised if there is no authentication for a given provider and profile."""
 
-    pass
-
 
 class ClientDoesNotSupportDynamicRegistration(Exception):
     """Raised when a client does not support dynamic registration."""
-
-    pass
 
 
 class BadClientIdError(Exception):
     """Raised when client registration is missing or invalid."""
 
-    pass
-
 
 class ClientIDDocumentRegistrationNotSupportedError(Exception):
     """Raised when client ID document registration is not supported by the provider."""
-
-    pass
 
 
 class SolidClient:
@@ -282,13 +274,11 @@ class SolidClient:
                 jwcrypto.jwt.JWTExpiredError,
                 jwcrypto.jwt.JWTInvalidSignatureError,
                 jwcrypto.jwt.JWTInvalidClaimError,
-                ValueError,
                 TypeError,
             ) as e:
                 # JWTExpiredError: Token has expired
                 # JWTInvalidSignatureError: Invalid signature
                 # JWTInvalidClaimError: Invalid claims
-                # ValueError: Invalid JWT format
                 # TypeError: Invalid key type
                 logger.debug("Error validating ID token", exc_info=e)
                 return False, {"error": "invalid_token", "error_description": str(e)}
