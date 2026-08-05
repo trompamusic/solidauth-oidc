@@ -62,21 +62,25 @@ We have a set of commandline tools to perform the steps needed to perform an aut
 
     Follow url that is printed, sign in, and authorize the request.
 
+    To sign in with a client ID document, ensure that `CONFIG_BASE_URL` is accessible from the internet and run:
+
+        uv run flask cli auth-request --use-client-id-document https://alastairp.solidcommunity.net/profile/card#me
+
 5. Token exchange
 
     If you have the redirect URL set up to a live ngrok server, the webapp will receive the callback and exchange the tokens. If not, you can exchange them manually:
 
-        arguments: provider code state
-
-        uv run flask cli exchange-auth https://solidcommunity.net/ [&code= param] [&state= param]
+        uv run flask cli exchange-auth [--use-client-id-document] CODE STATE https://solidcommunity.net/
 
     or with the entire URL (put the URL in quotes always to prevent & doing funny things in your shell)
 
-        uv run flask cli exchange-auth-url "https://0934-84-89-157-10.ngrok-free.app/redirect?code=d8f7701b-fb69-4d4e-ad24-4d788dca8b55&state=penPH3QYjuoevmd8Un76590IU2TRRLM8cVyHvqWMoNo9ioDEdgA&iss=https%3A%2F%2Flogin.inrupt.com"
+        uv run flask cli exchange-auth-url [--use-client-id-document] "https://0934-84-89-157-10.ngrok-free.app/redirect?code=d8f7701b-fb69-4d4e-ad24-4d788dca8b55&state=penPH3QYjuoevmd8Un76590IU2TRRLM8cVyHvqWMoNo9ioDEdgA&iss=https%3A%2F%2Flogin.inrupt.com"
+
+    Use `--use-client-id-document` if the authorization request used a client ID document.
 
 6. Refresh a token:
 
-	    uv run flask cli refresh https://alastairp.solidcommunity.net/profile/card#me
+	    uv run flask cli refresh [--use-client-id-document] https://alastairp.solidcommunity.net/profile/card#me
 
 
 # Using the library in other projects
@@ -85,18 +89,32 @@ You can use this library from another application.
 The main interfaces are in the `solidauth` package.
 
 ```py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from solidauth import client, solid
 from solidauth.backend.db_backend import DBBackend
 from solidauth.db import Base
-from solidauth import client
-from soliddemo.extensions import db
 
-backend = DBBackend(db.session)
+# Supports sqlite or postgresql
+engine = create_engine("sqlite:///solidauth.db")
 
 # Create the database tables
-Base.metadata.create_all(db.engine)
+Base.metadata.create_all(engine)
+
+session = Session(engine)
+backend = DBBackend(session)
+
+# Create the key used for DPoP proofs and token exchange
+if not backend.get_relying_party_keys():
+    backend.save_relying_party_keys(solid.generate_keys())
 
 sc = client.SolidClient(backend, use_client_id_document=True)
 ```
+
+The application should handle the SQLAlchemy engine and session lifecycle.
+
+Keep the value of `use_client_id_document` consistent throughout the app.
 
 ## Set a user agent
 
@@ -116,8 +134,8 @@ A user will come with a web-id (which is a URL). By looking up the URL you can i
 webid is registered.
 
 ### 1.
-Use `SolidClient.generate_authentication_url` to get some information about the provider, (optionally) register
-a client with it, and get a URL to sent the user to to complete the authentication request
+Use `SolidClient.generate_authentication_url` to discover the provider, register a client when needed, and create an
+authorization URL.
 
 ```py
 def generate_authentication_url(
@@ -126,63 +144,81 @@ def generate_authentication_url(
 ```
 
 Arguments:
-   - `webid_or_provider`: The webid of the user who wants to authenticate
-   - `registration_request`: If you want to perform dynamic registration (client_id_document_url is None), the contents of the registration request
-   - `redirect_url`: Where you want the provider to redirect you to after the user gives you permission. This must be a URL present in the client document/registration request
-   - `client_id_document_url`: If you want to use a client id document, the URL to this document. Use `None` to perform dynamic registration
 
-Dynamic registration creates an openid client on the fly and returns a client id and secret which can be used as you
-would "normally" do with openid. Alternatively, solid allows you to use a "client id document", where you
-specify a URL in your client_id, and you have no client_secret.
+- `webid_or_provider`: The WebID of the user who wants to authenticate, or the URL of their provider.
+- `registration_request`: The contents of the dynamic registration request. It is ignored when using a client ID
+  document or when a dynamic registration for the provider is already stored.
+- `redirect_url`: Where the provider should redirect the user after authorization. Use the same value in
+  `authentication_callback`.
+- `client_id_document_url`: The URL of the client ID document. Use `None` to use dynamic registration.
+
+With `client_id_document_url=None`, the method reuses a stored dynamic registration or creates one using
+`registration_request`. Dynamic registration provides a client ID and secret. A client ID document instead uses its
+URL as the client ID and has no client secret.
 
 If you want to use Client ID Documents then you need to provide a public endpoint which serves the
-document with a `Content-Type: application/ld+json` header. See `solid/__init__.py` and `solid.webserver.client_id_url()`
+document with a `Content-Type: application/ld+json` header. See `soliddemo.webserver.client_id_url()`
 for an example of this document. Note that the document needs to include its own URL as the `"client_id"` field.
 More documentation on registration is available at https://solidproject.org/TR/oidc#clientids
 
-If you set `client_id_document_url` to `None`, then this method will automatically perform a client registration
-using the data in `registration_request`, and will store the client information to the backend.
 See more about dynamic registration at https://openid.net/specs/openid-connect-registration-1_0.html
 
-The method will save a PKCE state and code in the backend and return the URL that you need to send the user to.
-
+The method returns a dictionary containing `provider`, `auth_url`, and diagnostic `log_messages`. Redirect the user
+to `auth_url` to authenticate and authorize the application.
 
 ### 2.
-At the redirect url, use `SolidClient.generate_authentication_url` to perform PKCE validation and key exchange
+At the redirect URL, use `SolidClient.authentication_callback` to perform PKCE validation and exchange the
+authorization code for tokens.
 
 ```py
 def authentication_callback(
-    self, auth_code, state, provider, redirect_uri, base_url
+    self, auth_code, state, provider, redirect_uri, client_id_document_url=None
 ):
 ```
 
 Arguments:
-  - `auth_code`: The PKCE `code` GET parameter returned in the callback URL
-  - `state`: The PKCE `state` GET parameter returned in the callback URL
-  - `provider`: The provider that you were redirected from. Some providers pass this in the `iss` GET parameter,
-    but if not then you should store it in a client state at the previous step and retrieve it.
-  - `redirect_uri`: The URL of this endpoint
+
+- `auth_code`: The `code` GET parameter returned in the callback URL.
+- `state`: The `state` GET parameter returned in the callback URL.
+- `provider`: The provider from which the user was redirected, usually provided in the `iss` GET parameter. Pass
+  `None` to use the provider that `generate_authentication_url` stored with the state.
+- `redirect_uri`: The URL of this callback endpoint. It must be the same value passed to
+  `generate_authentication_url`.
+- `client_id_document_url`: The exact client ID document URL passed to `generate_authentication_url`. Leave it as
+  `None` when using dynamic registration.
+
+The method returns `(True, token_response)` and stores the tokens on success. Handled token-exchange and validation
+failures return `(False, error_response)`; configuration and network failures may raise exceptions. State is consumed
+before the exchange, so start a new authentication flow after any failure.
 
 ### 3.
 
-To make an authenticated request as this user, use `SolidClient.get_bearer_for_user` to get the headers needed for this request
+Use `SolidClient.get_bearer_for_user` to create the headers for an authenticated request. It refreshes an expired
+access token automatically.
 
 ```py
 def get_bearer_for_user(self, provider, profile, url, method):
 ```
 
 Arguments:
-  - `provider`: The provider that the user authenticated at
-  - `profile`: The web id of the user making the request
-  - `url`: The URL of the request
-  - `method`: The HTTP method of the request
+
+- `provider`: The provider at which the user authenticated.
+- `profile`: The WebID of the user making the request.
+- `url`: The exact URL of the request.
+- `method`: The exact HTTP method of the request.
+
+The URL and method are embedded in the DPoP proof and must match request you make. The method raises
+`NoSuchAuthenticationError` if it has no authentication for this user, and `TokenRefreshFailed` when an expired
+token cannot be refreshed.
 
 ```py
-    provider = "https://solidcommunity.net/"
-    profile = "https://username.solidcommunity.net/profile/card#me"
-    container = "https://username.solidcommunity.net/location/"
-    headers = cl.get_bearer_for_user(provider, profile, container, "OPTIONS")
-    r = requests.options(container, headers=headers)
+import requests
+
+provider = "https://solidcommunity.net/"
+profile = "https://username.solidcommunity.net/profile/card#me"
+container = "https://username.solidcommunity.net/location/"
+headers = sc.get_bearer_for_user(provider, profile, container, "OPTIONS")
+r = requests.options(container, headers=headers)
 ```
 
 
