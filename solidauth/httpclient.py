@@ -31,8 +31,8 @@ def request(method: str, url: str, **kwargs) -> requests.Response:
     return requests.request(method, url, headers=headers, **kwargs)
 
 
-def get(url, **kwargs):
-    return request("GET", url, **kwargs)
+def get(url, params=None, **kwargs):
+    return request("GET", url, params=params, **kwargs)
 
 
 def options(url, **kwargs):
@@ -40,19 +40,22 @@ def options(url, **kwargs):
 
 
 def head(url, **kwargs):
+    # requests.head() defaults allow_redirects=False; preserve that here since the
+    # generic request() path (requests.request) would otherwise follow redirects.
+    kwargs.setdefault("allow_redirects", False)
     return request("HEAD", url, **kwargs)
 
 
-def post(url, **kwargs):
-    return request("POST", url, **kwargs)
+def post(url, data=None, json=None, **kwargs):
+    return request("POST", url, data=data, json=json, **kwargs)
 
 
-def put(url, **kwargs):
-    return request("PUT", url, **kwargs)
+def put(url, data=None, **kwargs):
+    return request("PUT", url, data=data, **kwargs)
 
 
-def patch(url, **kwargs):
-    return request("PATCH", url, **kwargs)
+def patch(url, data=None, **kwargs):
+    return request("PATCH", url, data=data, **kwargs)
 
 
 def delete(url, **kwargs):
