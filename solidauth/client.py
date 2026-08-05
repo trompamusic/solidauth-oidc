@@ -140,13 +140,6 @@ class SolidClient:
 
             log_messages.append("Got configuration and jwks for provider")
 
-        if not solid.op_can_do_dynamic_registration(provider_config):
-            # Provider doesn't support dynamic registration - this is an error
-            raise ClientDoesNotSupportDynamicRegistration(
-                f"Provider {provider} does not support dynamic client registration. "
-                f"Registration endpoint: {provider_config.get('registration_endpoint', 'not available')}"
-            )
-
         if client_id_document_url:
             # Check if the provider supports client ID document registration
             if not solid.op_supports_client_id_document_registration(provider_config):
@@ -159,6 +152,11 @@ class SolidClient:
             log_messages.append(f"Using a client id document: {client_id}")
             log_messages.append("Not performing dynamic registration, will use client_id as a URL")
         else:
+            if not solid.op_can_do_dynamic_registration(provider_config):
+                raise ClientDoesNotSupportDynamicRegistration(
+                    f"Provider {provider} does not support dynamic client registration. "
+                    f"Registration endpoint: {provider_config.get('registration_endpoint', 'not available')}"
+                )
             log_messages.append("Using dynamic client registration")
             client_registration = self.backend.get_client_registration(provider)
             if client_registration:
