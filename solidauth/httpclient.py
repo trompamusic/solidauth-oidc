@@ -29,3 +29,31 @@ def request(method: str, url: str, **kwargs) -> requests.Response:
     headers.update(kwargs.pop("headers", None) or {})
     kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
     return requests.request(method, url, headers=headers, **kwargs)
+
+
+def get(url, **kwargs):
+    return request("GET", url, **kwargs)
+
+
+def options(url, **kwargs):
+    return request("OPTIONS", url, **kwargs)
+
+
+def head(url, **kwargs):
+    return request("HEAD", url, **kwargs)
+
+
+def post(url, **kwargs):
+    return request("POST", url, **kwargs)
+
+
+def put(url, **kwargs):
+    return request("PUT", url, **kwargs)
+
+
+def patch(url, **kwargs):
+    return request("PATCH", url, **kwargs)
+
+
+def delete(url, **kwargs):
+    return request("DELETE", url, **kwargs)
