@@ -28,7 +28,7 @@ classifiers = [
 dependencies = [
     "jwcrypto~=1.5.8",
     "oic>=1.7.0",
-    "rdflib~=7.1.4",
+    "rdflib~=7.0",
     "requests~=2.34.2",
     "sqlalchemy~=2.0.51",
 ]
