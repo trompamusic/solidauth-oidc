@@ -371,8 +371,7 @@ def get_uri_jsonld(uri, headers=None):
 
 
 def get_storage_from_profile_ttl(profile_uri):
-    graph = rdflib.Graph()
-    graph.parse(profile_uri)
+    graph = solid.fetch_graph(profile_uri)
     storage = graph.value(
         subject=rdflib.URIRef(profile_uri), predicate=rdflib.URIRef("http://www.w3.org/ns/pim/space#storage")
     )

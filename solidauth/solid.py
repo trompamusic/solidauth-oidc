@@ -4,12 +4,13 @@ import json
 import logging
 import time
 import urllib.parse
-from urllib.error import HTTPError
 
 import jwcrypto.jwk
 import jwcrypto.jws
 import jwcrypto.jwt
 import rdflib
+import rdflib.parser
+import rdflib.plugin
 import requests
 import requests.utils
 from oic.oic import Client as OicClient
@@ -31,46 +32,91 @@ class IDTokenValidationError(Exception):
         super().__init__(message)
 
 
-def lookup_provider_from_profile(profile_url: str):
+class RdfFetchError(Exception):
+    """Base class for failures loading a URL into an RDF graph."""
+
+
+class RdfTransportError(RdfFetchError):
+    """Raised when an RDF document could not be fetched."""
+
+
+class RdfParseError(RdfFetchError):
+    """Raised when a document could not be parsed as RDF."""
+
+
+# The same Accept header that rdflib parse() uses
+RDF_ACCEPT = ", ".join(p.name for p in rdflib.plugin.plugins(kind=rdflib.parser.Parser) if "/" in p.name)
+
+
+def fetch_graph(url: str) -> rdflib.Graph:
+    """Fetch an RDF document over HTTP and parse it into a new rdflib Graph.
+
+    uses our local solidauth.httpclient which specifies a user-agent and explicit timeout
+
+    Returns:
+        a parsed rdflib Graph
+    Raises:
+        RdfTransportError: if the HTTP request failed
+        RdfParseError: if the document could not be parsed as RDF
     """
-
-    :param profile_url: The profile of the user, e.g.  https://alice.coolpod.example/profile/card#me
-    :return:
-    """
-
-    r = httpclient.request("OPTIONS", profile_url)
-    r.raise_for_status()
-    links = r.headers.get("Link")
-    if links:
-        parsed_links = requests.utils.parse_header_links(links)
-        for l in parsed_links:
-            if l.get("rel") == "http://openid.net/specs/connect/1.0/issuer":
-                return l["url"]
-
-    # If we get here, there was no rel in the options. Instead, try and get the card
-    # and find its issuer
+    try:
+        r = httpclient.request("GET", url, headers={"Accept": RDF_ACCEPT})
+        r.raise_for_status()
+    except requests.exceptions.RequestException as exc:
+        raise RdfTransportError(f"Could not fetch {url}: {exc}") from exc
+    # strip parameters (e.g. ; charset=x) from Content-Type
+    content_type = r.headers.get("Content-Type", "")
+    fmt = content_type.split(";", 1)[0].strip() or None
     graph = rdflib.Graph()
     try:
-        graph.parse(profile_url)
-        issuer = rdflib.URIRef("http://www.w3.org/ns/solid/terms#oidcIssuer")
-        triples = list(graph.triples((None, issuer, None)))
-        if triples:
-            # first item in the response, 3rd item in the triple
-            return triples[0][2].toPython()
-    except HTTPError as exc:
-        if exc.status == 404:
-            logger.debug("Cannot find a profile at this url")
-        else:
-            raise
+        graph.parse(data=r.text, publicID=url, format=fmt)
+    except Exception as exc:
+        raise RdfParseError(f"Could not parse RDF from {url}: {exc}") from exc
+    return graph
 
 
-def is_webid(url: str):
-    """See if a URL is of a web id or a provider"""
+def lookup_provider_from_profile(profile_url: str) -> str | None:
+    """Find the OIDC issuer (provider) of a WebID profile.
+
+    Parameters:
+        profile_url: The profile of the user, e.g. https://alice.coolpod.example/profile/card#me
+
+    Returns:
+        the provider URL, or `None` if it can't be determined
+    """
+
+    # Try OPTIONS + Link header first, but fall back to GET if it fails or is missing
     try:
-        provider = lookup_provider_from_profile(url)
-        return provider is not None
-    except HTTPError:
-        return False
+        r = httpclient.request("OPTIONS", profile_url)
+        r.raise_for_status()
+    except requests.exceptions.RequestException as exc:
+        logger.debug("OPTIONS probe failed for %s, falling back to card GET: %s", profile_url, exc)
+    else:
+        links = r.headers.get("Link")
+        if links:
+            parsed_links = requests.utils.parse_header_links(links)
+            for l in parsed_links:
+                if l.get("rel") == "http://openid.net/specs/connect/1.0/issuer":
+                    return l["url"]
+
+    # Canonical path: fetch the card and look for its issuer triple.
+    try:
+        graph = fetch_graph(profile_url)
+    except RdfFetchError as exc:
+        logger.debug("Could not fetch profile card %s: %s", profile_url, exc)
+        return None
+
+    issuer = rdflib.URIRef("http://www.w3.org/ns/solid/terms#oidcIssuer")
+    triples = list(graph.triples((None, issuer, None)))
+    if triples:
+        # first item in the response, 3rd item in the triple
+        return triples[0][2].toPython()
+    return None
+
+
+def is_webid(url: str) -> bool:
+    """See if a URL is a WebID (advertises an OIDC issuer) rather than a provider."""
+    return lookup_provider_from_profile(url) is not None
 
 
 def get_openid_configuration(op_url):
