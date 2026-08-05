@@ -50,6 +50,7 @@ ignore = ["E741"]
 [dependency-groups]
 dev = [
     "pytest>=8.4.1",
+    "ruff>=0.16.1",
 ]
 demo = [
     "click~=8.4.2",
