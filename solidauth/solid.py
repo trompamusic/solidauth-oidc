@@ -14,7 +14,9 @@ import requests
 import requests.utils
 from oic.oic import Client as OicClient
 from oic.utils.authn.client import CLIENT_AUTHN_METHOD
+from oic.utils.settings import OicClientSettings
 
+from solidauth import httpclient
 from solidauth.dpop import make_random_string, make_token_for
 
 logger = logging.getLogger(__name__)
@@ -36,7 +38,7 @@ def lookup_provider_from_profile(profile_url: str):
     :return:
     """
 
-    r = requests.options(profile_url, timeout=10)
+    r = httpclient.request("OPTIONS", profile_url)
     r.raise_for_status()
     links = r.headers.get("Link")
     if links:
@@ -86,7 +88,7 @@ def get_openid_configuration(op_url):
     else:
         url = op_url + "/" + path
 
-    r = requests.get(url, timeout=10)
+    r = httpclient.request("GET", url)
     r.raise_for_status()
     return r.json()
 
@@ -99,7 +101,7 @@ def load_op_jwks(op_config):
     """
     if "jwks_uri" not in op_config:
         raise ValueError("Cannot find 'jwks_uri'")
-    r = requests.get(op_config["jwks_uri"], timeout=10)
+    r = httpclient.request("GET", op_config["jwks_uri"])
     r.raise_for_status()
     return r.json()
 
@@ -287,8 +289,16 @@ def dynamic_registration(registration_request, op_config):
     if "registration_endpoint" not in op_config:
         raise ValueError("Cannot find 'registration_endpoint'")
 
-    client = OicClient(client_authn_method=CLIENT_AUTHN_METHOD)
-    registration_response = client.register(op_config["registration_endpoint"], **registration_request)
+    # pyoidc makes this request itself, and the only way to give it our User-Agent is a
+    # requests Session. Both the client and the register() call must stay inside the
+    # `with`: leaving the block closes the session.
+    with requests.Session() as session:
+        session.headers["User-Agent"] = httpclient.get_user_agent()
+        client = OicClient(
+            client_authn_method=CLIENT_AUTHN_METHOD,
+            settings=OicClientSettings(requests_session=session),
+        )
+        registration_response = client.register(op_config["registration_endpoint"], **registration_request)
     logger.debug("Registration response: %s", registration_response)
     return registration_response.to_dict()
 
@@ -336,8 +346,9 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
     print(f"{make_token_for(keypair, provider_info['token_endpoint'], 'POST')=}")
 
     # Exchange auth code for access token
-    resp = requests.post(
-        url=provider_info["token_endpoint"],
+    resp = httpclient.request(
+        "POST",
+        provider_info["token_endpoint"],
         data={
             "grant_type": "authorization_code",
             "client_id": client_id,
@@ -350,7 +361,6 @@ def validate_auth_callback(keypair, code_verifier, auth_code, provider_info, cli
         # and is one of the options reported by the RS in token_endpoint_auth_methods_supported
         auth=auth,
         allow_redirects=False,
-        timeout=10,
     )
     try:
         resp.raise_for_status()
@@ -371,13 +381,13 @@ def refresh_auth_token(keypair, provider_info, client_id, configuration_token, a
         "refresh_token": refresh_token,
         "client_id": client_id,
     }
-    resp = requests.post(
-        url=provider_info["token_endpoint"],
+    resp = httpclient.request(
+        "POST",
+        provider_info["token_endpoint"],
         data=data,
         headers={"DPoP": make_token_for(keypair, provider_info["token_endpoint"], "POST")},
         auth=auth,
         allow_redirects=False,
-        timeout=10,
     )
     print(f"url: {provider_info['token_endpoint']}")
     print(f"headers: {make_token_for(keypair, provider_info['token_endpoint'], 'POST')}")

@@ -5,7 +5,7 @@ from flask import current_app, jsonify, request, session, url_for
 from flask_login import login_required, login_user, logout_user
 
 import solidauth.solid
-from solidauth import client
+from solidauth import client, httpclient
 from solidauth.backend import SolidBackend
 from solidauth.backend.db_backend import DBBackend
 from soliddemo import db, extensions, get_sample_client_registration
@@ -48,6 +48,7 @@ def configure_logging():
 
 
 def create_app():
+    httpclient.set_user_agent("solidauth-demo/0.1.0 (+https://github.com/trompamusic/solidauth-oidc)")
     configure_logging()
     app = flask.Flask(__name__, template_folder="../templates")
     app.config.from_pyfile("../config.py")

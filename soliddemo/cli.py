@@ -7,10 +7,9 @@ import click
 import jwcrypto.jwk
 import jwcrypto.jwt
 import rdflib
-import requests
 from flask import Blueprint, current_app, url_for
 
-from solidauth import client, solid
+from solidauth import client, httpclient, solid
 from solidauth.backend import SolidBackend
 from solidauth.backend.db_backend import DBBackend
 from solidauth.dpop import make_random_string
@@ -363,7 +362,7 @@ def get_uri_jsonld(uri, headers=None):
     if not headers:
         headers = {}
     headers.update({"Accept": "application/ld+json"})
-    r = requests.get(uri, headers=headers)
+    r = httpclient.request("GET", uri, headers=headers)
     r.raise_for_status()
     logger.debug("Get json-ld from %s", uri)
     logger.debug("json-ld headers: %s", r.headers)
@@ -433,7 +432,7 @@ def add_file(profile, directory, name, contents, use_client_id_document):
     print(f"Headers: {headers}")
     print(f"File path: {file_path}")
     print(f"Contents: {contents}")
-    r = requests.put(file_path, data=contents, headers=headers)
+    r = httpclient.request("PUT", file_path, data=contents, headers=headers)
     if r.status_code == 201:
         print("Successfully created")
     else:
@@ -462,7 +461,7 @@ def delete_file(profile, directory, name, use_client_id_document):
 
     file_path = os.path.join(storage, os.path.normpath(os.path.join(directory, name)))
     headers = c.get_bearer_for_user(provider, profile, file_path, "DELETE")
-    r = requests.delete(file_path, headers=headers)
+    r = httpclient.request("DELETE", file_path, headers=headers)
     if r.status_code == 205:
         print("Successfully deleted")
     else:
@@ -529,4 +528,4 @@ def do_request(profile, directory, name=None, use_client_id_document=False, extr
     if extra_headers:
         headers.update(extra_headers)
 
-    return requests.get(file_path, headers=headers)
+    return httpclient.request("GET", file_path, headers=headers)

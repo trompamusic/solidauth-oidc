@@ -3,7 +3,7 @@ from urllib.error import HTTPError
 
 import pytest
 
-from solidauth import solid
+from solidauth import httpclient, solid
 
 
 class TestIsWebID:
@@ -43,26 +43,26 @@ class TestIsWebID:
 class TestLookupProviderFromProfile:
     """Test cases for the lookup_provider_from_profile function."""
 
-    @patch("requests.options")
-    def test_lookup_provider_from_profile_with_link_header(self, mock_options):
+    @patch("solidauth.solid.httpclient.request")
+    def test_lookup_provider_from_profile_with_link_header(self, mock_request):
         """Test that provider is found via Link header."""
         mock_response = Mock()
         mock_response.headers = {"Link": '<https://example.com>; rel="http://openid.net/specs/connect/1.0/issuer"'}
-        mock_options.return_value = mock_response
+        mock_request.return_value = mock_response
 
         result = solid.lookup_provider_from_profile("https://alice.example.com/profile/card#me")
 
         assert result == "https://example.com"
-        mock_options.assert_called_once_with("https://alice.example.com/profile/card#me", timeout=10)
+        mock_request.assert_called_once_with("OPTIONS", "https://alice.example.com/profile/card#me")
 
-    @patch("requests.options")
+    @patch("solidauth.solid.httpclient.request")
     @patch("rdflib.Graph")
-    def test_lookup_provider_from_profile_with_rdf_data(self, mock_graph_class, mock_options):
+    def test_lookup_provider_from_profile_with_rdf_data(self, mock_graph_class, mock_request):
         """Test that provider is found via RDF data when Link header is not available."""
         # Mock the options request to not have Link header
         mock_response = Mock()
         mock_response.headers = {}
-        mock_options.return_value = mock_response
+        mock_request.return_value = mock_response
 
         # Mock the RDF graph
         mock_graph = Mock()
@@ -78,14 +78,14 @@ class TestLookupProviderFromProfile:
         assert result == "https://example.com"
         mock_graph.parse.assert_called_once_with("https://alice.example.com/profile/card#me")
 
-    @patch("requests.options")
+    @patch("solidauth.solid.httpclient.request")
     @patch("rdflib.Graph")
-    def test_lookup_provider_from_profile_no_provider_found(self, mock_graph_class, mock_options):
+    def test_lookup_provider_from_profile_no_provider_found(self, mock_graph_class, mock_request):
         """Test that None is returned when no provider is found."""
         # Mock the options request to not have Link header
         mock_response = Mock()
         mock_response.headers = {}
-        mock_options.return_value = mock_response
+        mock_request.return_value = mock_response
 
         # Mock the RDF graph to not find any triples
         mock_graph = Mock()
@@ -96,10 +96,10 @@ class TestLookupProviderFromProfile:
 
         assert result is None
 
-    @patch("requests.options")
-    def test_lookup_provider_from_profile_404_error(self, mock_options):
+    @patch("solidauth.solid.httpclient.request")
+    def test_lookup_provider_from_profile_404_error(self, mock_request):
         """Test that HTTPError is raised when profile returns 404."""
-        mock_options.side_effect = HTTPError("https://example.com", 404, "Not Found", {}, None)
+        mock_request.side_effect = HTTPError("https://example.com", 404, "Not Found", {}, None)
 
         with pytest.raises(HTTPError):
             solid.lookup_provider_from_profile("https://alice.example.com/profile/card#me")
@@ -150,3 +150,19 @@ class TestOpSupportsClientIDDocumentRegistration:
         result = solid.op_supports_client_id_document_registration(op_config)
 
         assert result is False
+
+
+class TestDynamicRegistration:
+    """pyoidc makes its own request; it gets our User-Agent through a Session."""
+
+    @patch("solidauth.solid.OicClient")
+    def test_registration_uses_session_with_configured_user_agent(self, mock_client_class):
+        httpclient.set_user_agent("CLARA/1.0")
+
+        solid.dynamic_registration({"client_name": "app"}, {"registration_endpoint": "https://example.com/register"})
+
+        settings = mock_client_class.call_args.kwargs["settings"]
+        assert settings.requests_session.headers["User-Agent"] == "CLARA/1.0"
+        mock_client_class.return_value.register.assert_called_once_with(
+            "https://example.com/register", client_name="app"
+        )

@@ -98,6 +98,17 @@ Base.metadata.create_all(db.engine)
 sc = client.SolidClient(backend, use_client_id_document=True)
 ```
 
+## Set a user agent
+
+Call `set_user_agent` once at startup. If you don't do this then the default "solidauth/0.1.0"
+will be used.
+
+```py
+from solidauth import httpclient
+
+httpclient.set_user_agent("MyApp/1.0 (+https://example.org/myapp; me@example.org)")
+```
+
 ## Workflow
 
 Review the command-line steps above to see the general process that you will need to follow.
